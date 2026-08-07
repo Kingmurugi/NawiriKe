@@ -13,7 +13,7 @@
             "name": "MYSQL LOCAL",
             "database": "nawirike",
             "username": "root",
-            "password": "unsakapuntas",
+            "password": "",
             "connectionTimeout": 30
         }
     ]

@@ -29,10 +29,11 @@ try {
     // Get donation history
     $stmt = $conn->prepare("
         SELECT d.donation_id, d.amount, d.donation_type, d.donated_at, 
-               d.status,
-               v.first_name as victim_name, v.location as victim_location
+               d.status, d.payment_method,
+               vu.name as victim_name, v.location as victim_location
         FROM donations d 
         LEFT JOIN victims v ON d.victim_id = v.victim_id 
+        LEFT JOIN users vu ON v.user_id = vu.user_id 
         WHERE d.donor_id = ? 
         ORDER BY d.donated_at DESC
         LIMIT 10
@@ -48,7 +49,7 @@ try {
             COALESCE(SUM(CASE WHEN donated_at >= DATE_FORMAT(NOW(), '%Y-%m-01') THEN amount END), 0) as monthly_total,
             COUNT(DISTINCT victim_id) as victims_helped
         FROM donations 
-        WHERE donor_id = ?
+        WHERE donor_id = ? AND status = 'completed'
     ");
     $stmt->execute([$donorInfo['donor_id']]);
     $donationStats = $stmt->fetch();
@@ -71,10 +72,12 @@ try {
     $availableVictims = $stmt->fetchAll();
     
 } catch(PDOException $e) {
-    $error = $e->getMessage();
-    $donorInfo = [];
+    error_log('Donor Dashboard Error: ' . $e->getMessage());
+    $error = 'Some of your donation data could not be loaded. Please try again.';
+    $donorInfo = ['donor_id' => 0];
     $donationHistory = [];
     $donationStats = ['total_donations' => 0, 'total_amount' => 0, 'monthly_total' => 0, 'victims_helped' => 0];
+    $totalDonated = $donationCount = $victimsHelped = $monthlyTotal = 0;
     $availableVictims = [];
 }
 
@@ -453,7 +456,7 @@ if ($currentUser['role'] !== 'donor') {
             e.preventDefault();
             
             // Check if donor_id is valid
-            const donorId = <?php echo $donorInfo['donor_id']; ?>;
+            const donorId = <?php echo (int)($donorInfo['donor_id'] ?? 0); ?>;
             if (donorId === 0) {
                 showNotification('Donor record not found. Please contact administrator.', 'error');
                 return;
@@ -525,11 +528,27 @@ if ($currentUser['role'] !== 'donor') {
                 if (data.success) {
                     if (paymentMethod === 'mpesa') {
                         showNotification('M-Pesa STK Push sent! Check your phone to complete payment.', 'success');
-                        // Simulate payment completion check
+                        // Simulated STK push: confirm the transaction server-side so the
+                        // donation is settled and counted, instead of only faking success.
                         setTimeout(() => {
-                            showNotification('Payment successful! Thank you for your donation of KES ' + amount, 'success');
-                            this.reset();
-                            location.reload();
+                            const confirmData = new FormData();
+                            confirmData.append('action', 'confirm_mpesa_payment');
+                            confirmData.append('transaction_id', data.transaction_id);
+
+                            fetch('authController.php', { method: 'POST', body: confirmData })
+                                .then(response => response.json())
+                                .then(confirmation => {
+                                    if (confirmation.success) {
+                                        showNotification('Payment successful! Thank you for your donation of KES ' + amount, 'success');
+                                        location.reload();
+                                    } else {
+                                        showNotification('Payment not confirmed: ' + (confirmation.errors ? confirmation.errors.join(', ') : 'Unknown error'), 'error');
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('M-Pesa confirmation error:', error);
+                                    showNotification('Could not confirm the M-Pesa payment. Please check your donation history.', 'error');
+                                });
                         }, 3000);
                     } else {
                         const mode = donationMode === 'direct' ? 'direct donation' : 'general pool contribution';

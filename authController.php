@@ -9,6 +9,22 @@ session_start();
 
 // Include database connection
 require_once 'database.php';
+require_once 'reports.php';
+
+// Smallest donation or distribution the system accepts, in KES
+const MINIMUM_DONATION_AMOUNT = 100;
+
+// Role each POST action requires. 'any' means any logged-in user; actions absent
+// from this list (register, login, logout) are open to anonymous callers.
+const ACTION_REQUIRED_ROLES = [
+    'approve_victim' => 'admin',
+    'reject_victim' => 'admin',
+    'distribute_general_fund' => 'admin',
+    'update_victim_application' => 'victim',
+    'make_donation' => 'donor',
+    'initiate_mpesa_payment' => 'donor',
+    'confirm_mpesa_payment' => 'donor',
+];
 
 // Initialize database connection
 $database = new Database();
@@ -127,10 +143,6 @@ function handleLogin($conn) {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     
-    // Debug logging
-    error_log("Login attempt - Email: " . $email);
-    error_log("Login attempt - Password length: " . strlen($password));
-    
     // Validate input
     $errors = [];
     
@@ -144,7 +156,6 @@ function handleLogin($conn) {
     
     // If there are errors, return them
     if (!empty($errors)) {
-        error_log("Login validation errors: " . implode(', ', $errors));
         return ['success' => false, 'errors' => $errors];
     }
     
@@ -165,16 +176,13 @@ function handleLogin($conn) {
         $stmt->execute([$email]);
         $user = $stmt->fetch();
         
-        error_log("Database query executed, user found: " . ($user ? 'yes' : 'no'));
-        
+        // One message for both cases, so the form cannot be used to discover
+        // which email addresses are registered.
         if (!$user) {
-            error_log("User not found for email: " . $email);
-            return ['success' => false, 'errors' => ['User not found']];
+            return ['success' => false, 'errors' => ['Invalid email or password']];
         }
         
         if (password_verify($password, $user['password_hash'])) {
-            error_log("Password verification successful for user: " . $user['email']);
-            
             // Password is correct, start session
             session_regenerate_id(true); // Prevent session fixation
             
@@ -184,8 +192,6 @@ function handleLogin($conn) {
             $_SESSION['email'] = $user['email'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['logged_in'] = true;
-            
-            error_log("Session data stored for user ID: " . $user['user_id'] . ", Role: " . $user['role']);
             
             // Determine redirect URL based on role
             $redirect_url = '';
@@ -204,15 +210,14 @@ function handleLogin($conn) {
                     break;
             }
             
-            error_log("Login successful, redirecting to: " . $redirect_url);
             return ['success' => true, 'message' => 'Login successful!', 'role' => $user['role'], 'redirect_url' => $redirect_url];
         } else {
-            error_log("Password verification failed for user: " . $user['email']);
-            return ['success' => false, 'errors' => ['Invalid password']];
+            return ['success' => false, 'errors' => ['Invalid email or password']];
         }
         
     } catch(PDOException $e) {
-        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+        error_log('Login Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Login failed. Please try again.']];
     }
 }
 
@@ -268,13 +273,13 @@ function getCurrentUser() {
 function redirectByRole($role) {
     switch($role) {
         case 'admin':
-            header('Location: admin/dashboard.php');
+            header('Location: admin_dashboard.php');
             break;
         case 'donor':
-            header('Location: donor/dashboard.php');
+            header('Location: donor_dashboard.php');
             break;
         case 'victim':
-            header('Location: victim/dashboard.php');
+            header('Location: victim_dashboard.php');
             break;
         default:
             header('Location: login.html');
@@ -288,7 +293,7 @@ function redirectByRole($role) {
  */
 function requireLogin() {
     if (!isLoggedIn()) {
-        header('Location: ../login.html');
+        header('Location: login.html');
         exit();
     }
 }
@@ -300,7 +305,7 @@ function requireAdmin() {
     requireLogin();
     $user = getCurrentUser();
     if (!$user || $user['role'] !== 'admin') {
-        header('Location: ../login.html');
+        header('Location: login.html');
         exit();
     }
 }
@@ -313,17 +318,18 @@ function handleVictimApproval($conn, $victimId, $action) {
         // Update victim verification status
         $newStatus = ($action === 'approve') ? 'Approved' : 'Rejected';
         
-        $stmt = $conn->prepare("UPDATE victims SET verification_status = ?, last_updated = CURRENT_TIMESTAMP WHERE victim_id = ?");
-        $result = $stmt->execute([$newStatus, $victimId]);
+        $stmt = $conn->prepare("UPDATE victims SET verification_status = ? WHERE victim_id = ?");
+        $stmt->execute([$newStatus, $victimId]);
         
-        if ($result) {
-            return ['success' => true, 'message' => "Victim application {$newStatus} successfully"];
-        } else {
-            return ['success' => false, 'errors' => ['Failed to update victim status']];
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'errors' => ['Application not found or already ' . $newStatus]];
         }
         
+        return ['success' => true, 'message' => "Victim application {$newStatus} successfully"];
+        
     } catch(PDOException $e) {
-        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+        error_log('Victim Approval Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Failed to update victim status']];
     }
 }
 
@@ -331,23 +337,32 @@ function handleVictimApproval($conn, $victimId, $action) {
  * Handle Victim Application Update
  */
 function handleVictimApplicationUpdate($conn, $userId, $location, $vulnerability, $urgentNeeds) {
+    if ($urgentNeeds === '') {
+        // urgent_needs is an ENUM; an empty selection means "leave it unchanged".
+        $urgentNeeds = null;
+    }
+
     try {
-        // Update victim information
         $stmt = $conn->prepare("
             UPDATE victims 
-            SET location = ?, vulnerability_description = ?, urgent_needs = ?, last_updated = CURRENT_TIMESTAMP 
+            SET location = ?, vulnerability_description = ?, urgent_needs = COALESCE(?, urgent_needs) 
             WHERE user_id = ?
         ");
-        $result = $stmt->execute([$location, $vulnerability, $urgentNeeds, $userId]);
-        
-        if ($result) {
-            return ['success' => true, 'message' => 'Application updated successfully!'];
-        } else {
-            return ['success' => false, 'errors' => ['Failed to update application']];
+        $stmt->execute([$location, $vulnerability, $urgentNeeds, $userId]);
+
+        // Victims without an application row would otherwise be told the save
+        // succeeded while nothing was stored.
+        $stmt = $conn->prepare("SELECT victim_id FROM victims WHERE user_id = ?");
+        $stmt->execute([$userId]);
+        if (!$stmt->fetch()) {
+            return ['success' => false, 'errors' => ['No application found for your account. Please contact an administrator.']];
         }
+
+        return ['success' => true, 'message' => 'Application updated successfully!'];
         
     } catch(PDOException $e) {
-        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+        error_log('Application Update Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Failed to update application']];
     }
 }
 
@@ -357,31 +372,72 @@ function handleVictimApplicationUpdate($conn, $userId, $location, $vulnerability
  * Supports both cash and M-Pesa payment methods
  */
 function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $description, $paymentMethod = 'cash', $mpesaPhone = null) {
+    $amountErrors = validateDonationAmount($amount);
+    if (!empty($amountErrors)) {
+        return ['success' => false, 'errors' => $amountErrors];
+    }
+    $amount = round((float)$amount, 2);
+
     try {
-        // Insert new donation (victim_id can be NULL for general pool)
+        // Donation insert and donor running totals must move together, otherwise
+        // the admin dashboard and the donor's own figures drift apart.
+        $conn->beginTransaction();
+
         $stmt = $conn->prepare("
             INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone) 
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'completed', ?, ?)
         ");
-        $result = $stmt->execute([$donorId, $victimId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone]);
-        
-        if ($result) {
-            // Update donor total donations
-            $stmt = $conn->prepare("UPDATE donors SET total_donated = total_donated + ?, donation_count = donation_count + 1 WHERE donor_id = ?");
-            $stmt->execute([$amount, $donorId]);
-            
-            $message = ($victimId) 
-                ? 'Donation processed successfully!' 
-                : 'Donation added to general fund successfully!';
-            
-            return ['success' => true, 'message' => $message];
-        } else {
-            return ['success' => false, 'errors' => ['Failed to process donation']];
+        $stmt->execute([$donorId, $victimId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone]);
+
+        $stmt = $conn->prepare("UPDATE donors SET total_donated = total_donated + ?, donation_count = donation_count + 1 WHERE donor_id = ?");
+        $stmt->execute([$amount, $donorId]);
+
+        if ($stmt->rowCount() === 0) {
+            $conn->rollBack();
+            return ['success' => false, 'errors' => ['Donor record not found']];
         }
-        
+
+        $conn->commit();
+
+        $message = ($victimId) 
+            ? 'Donation processed successfully!' 
+            : 'Donation added to general fund successfully!';
+
+        return ['success' => true, 'message' => $message];
+
     } catch(PDOException $e) {
-        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+        if ($conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        error_log('Donation Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Failed to process donation']];
     }
+}
+
+/**
+ * Resolve the donors row belonging to a user
+ * @return int donor_id, or 0 when the user has no donor record
+ */
+function getDonorIdForUser($conn, $userId) {
+    $stmt = $conn->prepare("SELECT donor_id FROM donors WHERE user_id = ?");
+    $stmt->execute([$userId]);
+    $donor = $stmt->fetch();
+
+    return $donor ? (int)$donor['donor_id'] : 0;
+}
+
+/**
+ * Validate a donation or distribution amount
+ * @return array List of error messages (empty when valid)
+ */
+function validateDonationAmount($amount) {
+    if (!is_numeric($amount)) {
+        return ['Amount must be a number'];
+    }
+    if ((float)$amount < MINIMUM_DONATION_AMOUNT) {
+        return ['Minimum amount is KES ' . number_format(MINIMUM_DONATION_AMOUNT, 2)];
+    }
+    return [];
 }
 
 /**
@@ -389,6 +445,16 @@ function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $des
  * Simulates M-Pesa STK push for donations
  */
 function initiateMpesaPayment($conn, $donorId, $victimId, $amount, $donationType, $description, $mpesaPhone) {
+    $amountErrors = validateDonationAmount($amount);
+    if (!empty($amountErrors)) {
+        return ['success' => false, 'errors' => $amountErrors];
+    }
+    $amount = round((float)$amount, 2);
+
+    if (!preg_match('/^254[0-9]{9}$/', (string)$mpesaPhone)) {
+        return ['success' => false, 'errors' => ['M-Pesa phone number must be in the format 2547XXXXXXXX']];
+    }
+
     try {
         // Generate fake transaction ID
         $transactionId = 'MPESA' . time() . rand(1000, 9999);
@@ -399,22 +465,70 @@ function initiateMpesaPayment($conn, $donorId, $victimId, $amount, $donationType
             INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone, mpesa_transaction_id, mpesa_receipt_number, mpesa_status) 
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', 'mpesa', ?, ?, ?, 'pending')
         ");
-        $result = $stmt->execute([$donorId, $victimId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber]);
-        
-        if ($result) {
-            // Simulate successful STK push initiation
-            return [
-                'success' => true, 
-                'message' => 'M-Pesa STK Push initiated successfully',
-                'transaction_id' => $transactionId,
-                'amount' => $amount
-            ];
-        } else {
-            return ['success' => false, 'errors' => ['Failed to initiate M-Pesa payment']];
-        }
+        $stmt->execute([$donorId, $victimId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber]);
+
+        // Simulate successful STK push initiation. The donation stays 'pending'
+        // until confirmMpesaPayment() stands in for the Daraja callback.
+        return [
+            'success' => true, 
+            'message' => 'M-Pesa STK Push initiated successfully',
+            'transaction_id' => $transactionId,
+            'amount' => $amount
+        ];
         
     } catch(PDOException $e) {
-        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+        error_log('M-Pesa Initiation Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Failed to initiate M-Pesa payment']];
+    }
+}
+
+/**
+ * Confirm a simulated M-Pesa Payment
+ * Stands in for the Daraja STK push callback: settles the pending donation so it
+ * counts towards the donor totals and the admin dashboard figures.
+ */
+function confirmMpesaPayment($conn, $transactionId, $donorId) {
+    if (empty($transactionId)) {
+        return ['success' => false, 'errors' => ['Transaction ID is required']];
+    }
+
+    try {
+        $conn->beginTransaction();
+
+        $stmt = $conn->prepare("
+            SELECT donation_id, donor_id, amount 
+            FROM donations 
+            WHERE mpesa_transaction_id = ? AND donor_id = ? AND status = 'pending' 
+            FOR UPDATE
+        ");
+        $stmt->execute([$transactionId, $donorId]);
+        $donation = $stmt->fetch();
+
+        if (!$donation) {
+            $conn->rollBack();
+            return ['success' => false, 'errors' => ['No pending M-Pesa donation found for this transaction']];
+        }
+
+        $stmt = $conn->prepare("
+            UPDATE donations 
+            SET status = 'completed', mpesa_status = 'completed' 
+            WHERE donation_id = ?
+        ");
+        $stmt->execute([$donation['donation_id']]);
+
+        $stmt = $conn->prepare("UPDATE donors SET total_donated = total_donated + ?, donation_count = donation_count + 1 WHERE donor_id = ?");
+        $stmt->execute([$donation['amount'], $donation['donor_id']]);
+
+        $conn->commit();
+
+        return ['success' => true, 'message' => 'M-Pesa payment confirmed', 'amount' => $donation['amount']];
+
+    } catch(PDOException $e) {
+        if ($conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        error_log('M-Pesa Confirmation Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Failed to confirm M-Pesa payment']];
     }
 }
 
@@ -423,53 +537,74 @@ function initiateMpesaPayment($conn, $donorId, $victimId, $amount, $donationType
  * Admin distributes general pool funds to specific victims using distributions table
  */
 function distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes = '') {
+    $amountErrors = validateDonationAmount($amount);
+    if (!empty($amountErrors)) {
+        return ['success' => false, 'errors' => $amountErrors];
+    }
+    $amount = round((float)$amount, 2);
+
     try {
-        // Check if sufficient general pool funds available
-        $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE victim_id IS NULL");
-        $stmt->execute();
-        $generalPoolTotal = $stmt->fetch()['total'];
-        
-        // Get already distributed amount
-        $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as distributed FROM distributions");
-        $stmt->execute();
-        $totalDistributed = $stmt->fetch()['distributed'];
-        
-        $available = $generalPoolTotal - $totalDistributed;
-        
-        if ($amount > $available) {
-            return ['success' => false, 'errors' => ['Insufficient general pool funds. Available: KES ' . number_format($available, 2)]];
-        }
-        
-        // Find an available general pool donation to link to this distribution
+        // The availability check and the insert run in one transaction so two
+        // concurrent distributions cannot both pass the check and overdraw the pool.
+        $conn->beginTransaction();
+
         $stmt = $conn->prepare("
-            SELECT donation_id, amount 
+            SELECT COALESCE(SUM(amount), 0) as total 
             FROM donations 
-            WHERE victim_id IS NULL 
-            AND donation_id NOT IN (SELECT donation_id FROM distributions)
-            LIMIT 1
+            WHERE victim_id IS NULL AND status = 'completed'
+            FOR UPDATE
         ");
         $stmt->execute();
-        $availableDonation = $stmt->fetch();
-        
-        if (!$availableDonation) {
-            return ['success' => false, 'errors' => ['No available general pool donations to distribute']];
+        $generalPoolTotal = (float)$stmt->fetch()['total'];
+
+        $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as distributed FROM distributions");
+        $stmt->execute();
+        $totalDistributed = (float)$stmt->fetch()['distributed'];
+
+        $available = $generalPoolTotal - $totalDistributed;
+
+        if ($amount > $available) {
+            $conn->rollBack();
+            return ['success' => false, 'errors' => ['Insufficient general pool funds. Available: KES ' . number_format($available, 2)]];
         }
-        
-        // Create distribution record
+
+        // Link the distribution to the general pool donation with the most
+        // undistributed money left, so a distribution is never booked against a
+        // donation smaller than itself.
+        $stmt = $conn->prepare("
+            SELECT d.donation_id, d.amount - COALESCE(SUM(ds.amount), 0) AS remaining
+            FROM donations d
+            LEFT JOIN distributions ds ON ds.donation_id = d.donation_id
+            WHERE d.victim_id IS NULL AND d.status = 'completed'
+            GROUP BY d.donation_id, d.amount
+            HAVING remaining >= ?
+            ORDER BY remaining ASC
+            LIMIT 1
+        ");
+        $stmt->execute([$amount]);
+        $availableDonation = $stmt->fetch();
+
+        if (!$availableDonation) {
+            $conn->rollBack();
+            return ['success' => false, 'errors' => ['No single general pool donation has KES ' . number_format($amount, 2) . ' left to distribute. Try a smaller amount.']];
+        }
+
         $stmt = $conn->prepare("
             INSERT INTO distributions (donation_id, victim_id, amount, distributed_by, distribution_date, notes) 
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
         ");
-        $result = $stmt->execute([$availableDonation['donation_id'], $victimId, $amount, $adminUserId, $notes]);
-        
-        if ($result) {
-            return ['success' => true, 'message' => 'General fund distributed successfully!'];
-        } else {
-            return ['success' => false, 'errors' => ['Failed to distribute funds']];
-        }
-        
+        $stmt->execute([$availableDonation['donation_id'], $victimId, $amount, $adminUserId, $notes]);
+
+        $conn->commit();
+
+        return ['success' => true, 'message' => 'General fund distributed successfully!'];
+
     } catch(PDOException $e) {
-        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+        if ($conn->inTransaction()) {
+            $conn->rollBack();
+        }
+        error_log('Distribution Error: ' . $e->getMessage());
+        return ['success' => false, 'errors' => ['Failed to distribute funds']];
     }
 }
 
@@ -479,7 +614,7 @@ function distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes =
 function getGeneralPoolStats($conn) {
     try {
         // Total general pool donations
-        $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE victim_id IS NULL");
+        $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE victim_id IS NULL AND status = 'completed'");
         $stmt->execute();
         $totalPool = $stmt->fetch()['total'];
         
@@ -536,9 +671,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $action = $_POST['action'] ?? '';
     
-    // Debug logging
-    error_log("AuthController: Action received: " . $action);
-    error_log("AuthController: POST data: " . print_r($_POST, true));
+    // Authorize before dispatching. Actor identity always comes from the session,
+    // never from the request body, so a caller cannot act as another user.
+    $actor = getCurrentUser();
+    $requiredRole = ACTION_REQUIRED_ROLES[$action] ?? null;
+    
+    if ($requiredRole !== null) {
+        if (!$actor) {
+            echo json_encode(['success' => false, 'errors' => ['You must be logged in to do that']]);
+            exit();
+        }
+        if ($requiredRole !== 'any' && $actor['role'] !== $requiredRole) {
+            echo json_encode(['success' => false, 'errors' => ['You are not allowed to do that']]);
+            exit();
+        }
+    }
     
     switch($action) {
         case 'register':
@@ -569,7 +716,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
             
         case 'update_victim_application':
-            $userId = $_POST['user_id'] ?? 0;
+            // A victim may only update their own application.
+            $userId = $actor['user_id'];
             $location = $_POST['location'] ?? '';
             $vulnerability = $_POST['vulnerability'] ?? '';
             $urgentNeeds = $_POST['urgent_needs'] ?? '';
@@ -578,7 +726,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
             
         case 'make_donation':
-            $donorId = $_POST['donor_id'] ?? 0;
+            $donorId = getDonorIdForUser($conn, $actor['user_id']);
             $victimId = !empty($_POST['victim_id']) ? $_POST['victim_id'] : null;
             $amount = $_POST['amount'] ?? 0;
             $donationType = $_POST['donation_type'] ?? 'monetary';
@@ -589,8 +737,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode($result);
             break;
             
+        case 'confirm_mpesa_payment':
+            $result = confirmMpesaPayment($conn, $_POST['transaction_id'] ?? '', getDonorIdForUser($conn, $actor['user_id']));
+            echo json_encode($result);
+            break;
+            
         case 'initiate_mpesa_payment':
-            $donorId = $_POST['donor_id'] ?? 0;
+            $donorId = getDonorIdForUser($conn, $actor['user_id']);
             $victimId = !empty($_POST['victim_id']) ? $_POST['victim_id'] : null;
             $amount = $_POST['amount'] ?? 0;
             $donationType = $_POST['donation_type'] ?? 'monetary';
@@ -601,7 +754,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
             
         case 'distribute_general_fund':
-            $adminUserId = $_POST['admin_user_id'] ?? 0;
+            $adminUserId = $actor['user_id'];
             $victimId = $_POST['victim_id'] ?? 0;
             $amount = $_POST['amount'] ?? 0;
             $notes = $_POST['notes'] ?? '';
