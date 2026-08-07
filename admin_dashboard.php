@@ -6,29 +6,27 @@ requireAdmin();
 
 $currentUser = getCurrentUser();
 
+// Which report is currently selected in the Reports section
+$selectedReport = $_GET['report'] ?? 'donations';
+if (!array_key_exists($selectedReport, getAvailableReports())) {
+    $selectedReport = 'donations';
+}
+
 try {
-    // Total users count
-    $stmt = $conn->prepare("SELECT COUNT(*) as total FROM users");
-    $stmt->execute();
-    $totalUsers = $stmt->fetch()['total'];
-    
-    // Total donors count
-    $stmt = $conn->prepare("SELECT COUNT(*) as total FROM donors d JOIN users u ON d.user_id = u.user_id");
-    $stmt->execute();
-    $totalDonors = $stmt->fetch()['total'];
-    
-    // Total victims count
-    $stmt = $conn->prepare("SELECT COUNT(*) as total FROM victims v JOIN users u ON v.user_id = u.user_id");
-    $stmt->execute();
-    $totalVictims = $stmt->fetch()['total'];
-    
-    // Total donations sum
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations");
-    $stmt->execute();
-    $totalDonations = $stmt->fetch()['total'];
+    // Headline figures, all read live from the database
+    $stats = getAdminDashboardStats($conn);
+    $totalUsers = $stats['total_users'];
+    $totalDonors = $stats['total_donors'];
+    $totalVictims = $stats['total_victims'];
+    $totalDonations = $stats['total_donations'];
+    $donationCount = $stats['donation_count'];
+    $pendingDonations = $stats['pending_donations'];
     
     // Get general pool statistics
     $generalPoolStats = getGeneralPoolStats($conn);
+    
+    // Selected report for the Reports section
+    $report = getReport($conn, $selectedReport);
     
     // Get approved victims for fund distribution
     $stmt = $conn->prepare("
@@ -52,6 +50,11 @@ try {
     $stmt->execute();
     $pendingVictims = $stmt->fetchAll();
     
+    // Rejected application count
+    $stmt = $conn->prepare("SELECT COUNT(*) as total FROM victims WHERE verification_status = 'Rejected'");
+    $stmt->execute();
+    $rejectedVictimCount = $stmt->fetch()['total'];
+    
     // Get all users list
     $stmt = $conn->prepare("
         SELECT u.user_id, u.name, u.email, u.role, u.created_at,
@@ -69,9 +72,14 @@ try {
     $allUsers = $stmt->fetchAll();
     
 } catch(PDOException $e) {
-    $error = $e->getMessage();
+    error_log('Admin Dashboard Error: ' . $e->getMessage());
+    $error = 'Some dashboard data could not be loaded. Please try again.';
     $totalUsers = $totalDonors = $totalVictims = $totalDonations = 0;
-    $pendingVictims = $allUsers = [];
+    $donationCount = $pendingDonations = 0;
+    $generalPoolStats = ['total_pool' => 0, 'total_distributed' => 0, 'available' => 0, 'distribution_count' => 0];
+    $pendingVictims = $allUsers = $approvedVictims = [];
+    $rejectedVictimCount = 0;
+    $report = null;
 }
 ?>
 
@@ -203,6 +211,82 @@ try {
             background: #0056b3;
         }
         
+        .report-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .report-tab {
+            padding: 8px 14px;
+            border-radius: 20px;
+            background: #f1f3f5;
+            color: #333;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .report-tab.active {
+            background: #007bff;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        
+        .export-btn {
+            background: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .export-btn:hover {
+            background: #1e7e34;
+        }
+        
+        .report-scroll {
+            max-height: 520px;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+        }
+        
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        .report-table th {
+            position: sticky;
+            top: 0;
+            background: #f8f9fa;
+            padding: 10px;
+            text-align: left;
+            border-bottom: 2px solid #dee2e6;
+            white-space: nowrap;
+        }
+        
+        .report-table td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .report-table tr:nth-child(even) td {
+            background: #fcfcfc;
+        }
+        
         .role-badge {
             background: #28a745;
             color: white;
@@ -245,6 +329,10 @@ try {
             <div class="stat-card">
                 <h3>Total Donations</h3>
                 <div class="number">KES <?php echo number_format($totalDonations, 2); ?></div>
+                <small style="color: #666;">
+                    <?php echo number_format($donationCount); ?> completed<?php if ($pendingDonations > 0): ?>,
+                    KES <?php echo number_format($pendingDonations, 2); ?> pending<?php endif; ?>
+                </small>
             </div>
             <div class="stat-card">
                 <h3>General Pool</h3>
@@ -334,6 +422,54 @@ try {
             <?php endif; ?>
         </div>
         
+        <!-- Reports -->
+        <div class="admin-actions">
+            <h2>Reports</h2>
+            <div class="report-tabs">
+                <?php foreach (getAvailableReports() as $slug => $title): ?>
+                    <a href="admin_dashboard.php?report=<?php echo urlencode($slug); ?>#reports"
+                       class="report-tab <?php echo $slug === $selectedReport ? 'active' : ''; ?>">
+                        <?php echo htmlspecialchars($title); ?>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+            
+            <?php if ($report === null): ?>
+                <p style="color: #666;">Report data is unavailable.</p>
+            <?php elseif (empty($report['rows'])): ?>
+                <p style="color: #666;">No data yet for <?php echo htmlspecialchars($report['title']); ?>. Load <code>seed_data.sql</code> to populate the system.</p>
+            <?php else: ?>
+                <div id="reports" class="report-header">
+                    <p>
+                        <strong><?php echo htmlspecialchars($report['title']); ?></strong>
+                        &mdash; <?php echo number_format(count($report['rows'])); ?> records
+                        <span style="color: #666;">(generated <?php echo date('M j, Y H:i'); ?>)</span>
+                    </p>
+                    <a class="export-btn" href="export_report.php?report=<?php echo urlencode($selectedReport); ?>">Export CSV</a>
+                </div>
+                <div class="report-scroll">
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <?php foreach ($report['columns'] as $label): ?>
+                                    <th><?php echo htmlspecialchars($label); ?></th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($report['rows'] as $row): ?>
+                                <tr>
+                                    <?php foreach (array_keys($report['columns']) as $key): ?>
+                                        <td><?php echo htmlspecialchars(formatReportCell($key, $row[$key] ?? '')); ?></td>
+                                    <?php endforeach; ?>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+        
         <!-- All Users -->
         <div class="admin-actions">
             <h2>All Users</h2>
@@ -384,8 +520,10 @@ try {
     </div>
     
     <script>
-        // Handle general fund distribution form
-        document.getElementById('distribution-form').addEventListener('submit', function(e) {
+        // Handle general fund distribution form (only rendered when funds and
+        // approved victims are both available)
+        const distributionForm = document.getElementById('distribution-form');
+        if (distributionForm) distributionForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
             const formData = new FormData(this);
@@ -425,16 +563,6 @@ try {
                 submitBtn.disabled = false;
             });
         });
-        
-        // Load dashboard statistics
-        function loadStats() {
-            // This would typically make AJAX calls to get real data
-            // For now, showing placeholder data
-            document.getElementById('total-users').textContent = '25';
-            document.getElementById('total-donors').textContent = '12';
-            document.getElementById('total-victims').textContent = '8';
-            document.getElementById('total-donations').textContent = 'KES 45,000';
-        }
         
         // Victim approval functions
         function approveVictim(victimId) {
@@ -606,15 +734,15 @@ try {
                         <h4 style="color: #007bff;">Application Status Overview:</h4>
                         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 10px;">
                             <div style="text-align: center; padding: 15px; background: #fff3cd; border-radius: 5px;">
-                                <div style="font-size: 24px; font-weight: bold; color: #856404;"><?php echo $pendingVictims; ?></div>
+                                <div style="font-size: 24px; font-weight: bold; color: #856404;"><?php echo count($pendingVictims); ?></div>
                                 <div style="color: #856404;">Pending Applications</div>
                             </div>
                             <div style="text-align: center; padding: 15px; background: #d4edda; border-radius: 5px;">
-                                <div style="font-size: 24px; font-weight: bold; color: #155724;"><?php echo $approvedVictims; ?></div>
+                                <div style="font-size: 24px; font-weight: bold; color: #155724;"><?php echo count($approvedVictims); ?></div>
                                 <div style="color: #155724;">Approved Victims</div>
                             </div>
                             <div style="text-align: center; padding: 15px; background: #f8d7da; border-radius: 5px;">
-                                <div style="font-size: 24px; font-weight: bold; color: #721c24;"><?php echo $rejectedVictims; ?></div>
+                                <div style="font-size: 24px; font-weight: bold; color: #721c24;"><?php echo $rejectedVictimCount; ?></div>
                                 <div style="color: #721c24;">Rejected Applications</div>
                             </div>
                         </div>
@@ -662,9 +790,9 @@ try {
                     <div style="margin-bottom: 20px;">
                         <h4 style="color: #007bff;">Recent Activity:</h4>
                         <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px;">
-                            <p style="color: #666; margin: 0;">Total donations processed: <strong><?php echo $totalDonations; ?></strong></p>
-                            <p style="color: #666; margin: 5px 0 0 0;">Active donors this month: <strong><?php echo $totalDonors; ?></strong></p>
-                            <p style="color: #666; margin: 5px 0 0 0;">Victims receiving support: <strong><?php echo $approvedVictims; ?></strong></p>
+                            <p style="color: #666; margin: 0;">Total donations processed: <strong>KES <?php echo number_format($totalDonations, 2); ?></strong> across <strong><?php echo number_format($donationCount); ?></strong> donations</p>
+                            <p style="color: #666; margin: 5px 0 0 0;">Registered donors: <strong><?php echo number_format($totalDonors); ?></strong></p>
+                            <p style="color: #666; margin: 5px 0 0 0;">Victims receiving support: <strong><?php echo count($approvedVictims); ?></strong></p>
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -701,9 +829,9 @@ try {
                     <div style="margin-bottom: 20px;">
                         <p>Review and manage victim applications:</p>
                         <ul style="margin-left: 20px; margin-top: 10px;">
-                            <li>Pending applications: <strong><?php echo $pendingVictims; ?></strong></li>
-                            <li>Recently approved: <strong><?php echo $approvedVictims; ?></strong></li>
-                            <li>Recently rejected: <strong><?php echo $rejectedVictims; ?></strong></li>
+                            <li>Pending applications: <strong><?php echo count($pendingVictims); ?></strong></li>
+                            <li>Approved: <strong><?php echo count($approvedVictims); ?></strong></li>
+                            <li>Rejected: <strong><?php echo $rejectedVictimCount; ?></strong></li>
                         </ul>
                     </div>
                     <div style="margin-bottom: 20px;">
@@ -762,7 +890,7 @@ try {
                         </div>
                     </div>
                     <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 15px;">
-                        <p style="margin: 0; color: #666;"><strong>Current Data:</strong> System contains <?php echo $totalUsers; ?> users, <?php echo $totalDonors; ?> donors, and <?php echo $approvedVictims; ?> approved victims.</p>
+                        <p style="margin: 0; color: #666;"><strong>Current Data:</strong> System contains <?php echo number_format($totalUsers); ?> users, <?php echo number_format($totalDonors); ?> donors, and <?php echo count($approvedVictims); ?> approved victims.</p>
                     </div>
                 </div>
             `;
@@ -787,7 +915,7 @@ try {
         }
         
         // Load stats when page loads
-        window.onload = loadStats;
+
     </script>
 </body>
 </html>

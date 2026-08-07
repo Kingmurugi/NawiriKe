@@ -4,10 +4,6 @@
  * Protected page for victim users only
  */
 
-// Enable error reporting for debugging
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 // Include authentication (authController.php already starts the session)
 require_once 'authController.php';
 
@@ -32,28 +28,32 @@ try {
     // Get donations received by this victim (only if victim exists)
     $donationsReceived = [];
     if ($victimInfo && !empty($victimInfo['victim_id'])) {
+        // Support arrives two ways: direct donations, and benefits distributed
+        // by an admin out of the general pool.
         $stmt = $conn->prepare("
-            SELECT d.amount, d.donation_type, d.donated_at, d.description,
-                   CASE 
-                       WHEN d.donor_id IS NOT NULL THEN u.name
-                       ELSE 'General Fund'
-                   END as donor_name,
-                   CASE 
-                       WHEN d.donor_id IS NOT NULL THEN u.email
-                       ELSE 'N/A'
-                   END as donor_email,
-                   CASE 
-                       WHEN d.donor_id IS NULL THEN 'General Fund Distribution'
-                       ELSE 'Direct Donation'
-                   END as donation_source
-            FROM donations d 
-            LEFT JOIN donors dn ON d.donor_id = dn.donor_id 
-            LEFT JOIN users u ON dn.user_id = u.user_id 
-            WHERE d.victim_id = ? 
-            ORDER BY d.donated_at DESC
+            SELECT amount, donation_type, received_at as donated_at, description,
+                   donor_name, donor_email, donation_source
+            FROM (
+                SELECT d.amount, d.donation_type, d.donated_at as received_at, d.description,
+                       COALESCE(u.name, 'Anonymous') as donor_name,
+                       COALESCE(u.email, 'N/A') as donor_email,
+                       'Direct Donation' as donation_source
+                FROM donations d 
+                LEFT JOIN donors dn ON d.donor_id = dn.donor_id 
+                LEFT JOIN users u ON dn.user_id = u.user_id 
+                WHERE d.victim_id = ? AND d.status = 'completed'
+                UNION ALL
+                SELECT ds.amount, 'monetary' as donation_type, ds.distribution_date as received_at, ds.notes as description,
+                       'General Fund' as donor_name,
+                       'N/A' as donor_email,
+                       'General Fund Distribution' as donation_source
+                FROM distributions ds
+                WHERE ds.victim_id = ?
+            ) support
+            ORDER BY received_at DESC
             LIMIT 5
         ");
-        $stmt->execute([$victimInfo['victim_id']]);
+        $stmt->execute([$victimInfo['victim_id'], $victimInfo['victim_id']]);
         $donationsReceived = $stmt->fetchAll();
     }
     
@@ -61,17 +61,19 @@ try {
     $donationStats = ['total_received' => 0, 'donation_count' => 0];
     if ($victimInfo && !empty($victimInfo['victim_id'])) {
         $stmt = $conn->prepare("
-            SELECT COALESCE(SUM(amount), 0) as total_received,
-                COUNT(*) as donation_count
-            FROM donations 
-            WHERE victim_id = ?
+            SELECT
+                (SELECT COALESCE(SUM(amount), 0) FROM donations WHERE victim_id = ? AND status = 'completed')
+                    + (SELECT COALESCE(SUM(amount), 0) FROM distributions WHERE victim_id = ?) as total_received,
+                (SELECT COUNT(*) FROM donations WHERE victim_id = ? AND status = 'completed')
+                    + (SELECT COUNT(*) FROM distributions WHERE victim_id = ?) as donation_count
         ");
-        $stmt->execute([$victimInfo['victim_id']]);
+        $stmt->execute(array_fill(0, 4, $victimInfo['victim_id']));
         $donationStats = $stmt->fetch();
     }
     
 } catch(PDOException $e) {
-    $error = $e->getMessage();
+    error_log('Victim Dashboard Error: ' . $e->getMessage());
+    $error = 'Some of your application data could not be loaded. Please try again.';
     $victimInfo = [];
     $donationsReceived = [];
     $donationStats = ['total_received' => 0, 'donation_count' => 0];
