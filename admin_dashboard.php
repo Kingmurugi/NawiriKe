@@ -10,22 +10,26 @@ try {
     // Total users count
     $stmt = $conn->prepare("SELECT COUNT(*) as total FROM users");
     $stmt->execute();
-    $totalUsers = $stmt->fetch()['total'];
+    $result = $stmt->get_result();
+    $totalUsers = $result->fetch_assoc()['total'];
     
     // Total donors count
     $stmt = $conn->prepare("SELECT COUNT(*) as total FROM donors d JOIN users u ON d.user_id = u.user_id");
     $stmt->execute();
-    $totalDonors = $stmt->fetch()['total'];
+    $result = $stmt->get_result();
+    $totalDonors = $result->fetch_assoc()['total'];
     
     // Total victims count
     $stmt = $conn->prepare("SELECT COUNT(*) as total FROM victims v JOIN users u ON v.user_id = u.user_id");
     $stmt->execute();
-    $totalVictims = $stmt->fetch()['total'];
+    $result = $stmt->get_result();
+    $totalVictims = $result->fetch_assoc()['total'];
     
     // Total donations sum
     $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations");
     $stmt->execute();
-    $totalDonations = $stmt->fetch()['total'];
+    $result = $stmt->get_result();
+    $totalDonations = $result->fetch_assoc()['total'];
     
     // Get general pool statistics
     $generalPoolStats = getGeneralPoolStats($conn);
@@ -39,7 +43,8 @@ try {
         ORDER BY v.date_registered DESC
     ");
     $stmt->execute();
-    $approvedVictims = $stmt->fetchAll();
+    $result = $stmt->get_result();
+    $approvedVictims = $result->fetch_all(MYSQLI_ASSOC);
     
     // Get pending victims for approval
     $stmt = $conn->prepare("
@@ -50,7 +55,8 @@ try {
         ORDER BY v.date_registered DESC
     ");
     $stmt->execute();
-    $pendingVictims = $stmt->fetchAll();
+    $result = $stmt->get_result();
+    $pendingVictims = $result->fetch_all(MYSQLI_ASSOC);
     
     // Get all users list
     $stmt = $conn->prepare("
@@ -66,9 +72,52 @@ try {
         ORDER BY u.created_at DESC
     ");
     $stmt->execute();
-    $allUsers = $stmt->fetchAll();
+    $result = $stmt->get_result();
+    $allUsers = $result->fetch_all(MYSQLI_ASSOC);
     
-} catch(PDOException $e) {
+    // Get donation reports data
+    $stmt = $conn->prepare("
+        SELECT d.donation_id, u.name as donor_name, v.name as victim_name, 
+               d.amount, d.donation_type, d.description, d.donated_at, d.status, d.payment_method
+        FROM donations d
+        LEFT JOIN donors don ON d.donor_id = don.donor_id
+        LEFT JOIN users u ON don.user_id = u.user_id
+        LEFT JOIN victims vic ON d.victim_id = vic.victim_id
+        LEFT JOIN users v ON vic.user_id = v.user_id
+        ORDER BY d.donated_at DESC
+        LIMIT 50
+    ");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $recentDonations = $result->fetch_all(MYSQLI_ASSOC);
+    
+    // Get distribution reports data
+    $stmt = $conn->prepare("
+        SELECT dist.distribution_id, dist.amount, dist.distribution_date, dist.notes,
+               u.name as victim_name, v.location
+        FROM distributions dist
+        LEFT JOIN victims v ON dist.victim_id = v.victim_id
+        LEFT JOIN users u ON v.user_id = u.user_id
+        ORDER BY dist.distribution_date DESC
+        LIMIT 50
+    ");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $recentDistributions = $result->fetch_all(MYSQLI_ASSOC);
+    
+    // Get donor ranking report
+    $stmt = $conn->prepare("
+        SELECT u.name, u.email, d.total_donated, d.donation_count, d.created_at
+        FROM donors d
+        JOIN users u ON d.user_id = u.user_id
+        ORDER BY d.total_donated DESC
+        LIMIT 20
+    ");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $topDonors = $result->fetch_all(MYSQLI_ASSOC);
+    
+} catch(Exception $e) {
     $error = $e->getMessage();
     $totalUsers = $totalDonors = $totalVictims = $totalDonations = 0;
     $pendingVictims = $allUsers = [];
@@ -90,126 +139,464 @@ try {
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             min-height: 100vh;
         }
         
         .dashboard-container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 30px;
         }
         
         .header {
             background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 20px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 5px solid #667eea;
+            animation: slideDown 0.5s ease;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .header h1 {
             color: #333;
-            font-size: 28px;
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
         }
         
         .user-info {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 20px;
         }
         
         .user-info span {
             color: #666;
+            font-weight: 500;
         }
         
         .logout-btn {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 8px 16px;
+            padding: 12px 24px;
             border: none;
-            border-radius: 5px;
+            border-radius: 25px;
             cursor: pointer;
             text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
         }
         
         .logout-btn:hover {
-            background: #0056b3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
         }
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
         }
         
         .stat-card {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
             text-align: center;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 1px solid rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
         }
         
         .stat-card h3 {
             color: #666;
             font-size: 14px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 1px;
         }
         
         .stat-card .number {
             color: #333;
-            font-size: 32px;
-            font-weight: bold;
+            font-size: 42px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         .admin-actions {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 35px;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            margin-bottom: 30px;
+            border: 1px solid rgba(0,0,0,0.05);
+            animation: fadeIn 0.6s ease;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .admin-actions h2 {
             color: #333;
-            margin-bottom: 20px;
-        }
-        
-        .action-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .action-btn {
-            background: #007bff;
-            color: white;
-            padding: 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            text-decoration: none;
-            display: block;
-            text-align: center;
-            transition: background 0.3s;
-        }
-        
-        .action-btn:hover {
-            background: #0056b3;
+            margin-bottom: 30px;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            border-bottom: 4px solid #667eea;
+            padding-bottom: 15px;
         }
         
         .role-badge {
-            background: #28a745;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 4px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-            font-weight: bold;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 13px;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+        }
+        
+        .report-section {
+            background: white;
+            padding: 35px;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            margin-bottom: 30px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .report-section h2 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            border-bottom: 4px solid #667eea;
+            padding-bottom: 15px;
+        }
+        
+        .report-table table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        .report-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .report-table th {
+            color: white;
+            padding: 18px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .report-table td {
+            padding: 18px;
+            border-bottom: 1px solid #e9ecef;
+            color: #333;
+            font-size: 15px;
+        }
+        
+        .report-table tbody tr {
+            transition: all 0.3s ease;
+        }
+        
+        .report-table tbody tr:hover {
+            background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
+        }
+        
+        .report-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-completed {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        
+        .status-pending {
+            background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+            color: white;
+        }
+        
+        .status-failed {
+            background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%);
+            color: white;
+        }
+        
+        .amount-highlight {
+            font-weight: 700;
+            color: #667eea;
+            font-size: 16px;
+        }
+        
+        .report-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(102,126,234,0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .summary-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px rgba(102,126,234,0.4);
+        }
+        
+        .summary-card h4 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            opacity: 0.95;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: 800;
+        }
+        
+        .report-selector {
+            background: white;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            margin-bottom: 30px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .report-selector h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        .report-selector select {
+            width: 100%;
+            padding: 15px 20px;
+            border: 3px solid #667eea;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+            padding-right: 45px;
+        }
+        
+        .report-selector select:hover {
+            border-color: #764ba2;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.2);
+        }
+        
+        .report-selector select:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(102,126,234,0.15);
+        }
+        
+        .report-content {
+            display: none;
+        }
+        
+        .report-table {
+            max-height: 450px;
+            overflow-y: auto;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .report-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .report-table::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .report-table::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .report-table::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px;
+        }
+        
+        button {
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* Enhanced form styling */
+        input[type="number"], 
+        input[type="text"],
+        select {
+            transition: all 0.3s ease;
+        }
+        
+        input[type="number"]:focus, 
+        input[type="text"]:focus,
+        select:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.2);
+        }
+        
+        /* Enhanced table row styling */
+        .report-table tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .report-table tbody tr:nth-child(even):hover {
+            background: linear-gradient(135deg, rgba(102,126,234,0.08) 0%, rgba(118,75,162,0.08) 100%);
+        }
+        
+        /* Enhanced status badges */
+        .status-badge {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* Enhanced summary cards */
+        .summary-card {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .summary-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: shimmer 3s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        
+        /* Enhanced header gradient */
+        .header {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        }
+        
+        /* Enhanced stat cards */
+        .stat-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        }
+        
+        /* Enhanced admin actions section */
+        .admin-actions {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        }
+        
+        /* Enhanced report section */
+        .report-section {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        }
+        
+        /* Enhanced report selector */
+        .report-selector {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
         }
     </style>
 </head>
@@ -334,56 +721,268 @@ try {
             <?php endif; ?>
         </div>
         
-        <!-- All Users -->
-        <div class="admin-actions">
-            <h2>All Users</h2>
-            <?php if (empty($allUsers)): ?>
-                <p style="color: #666;">No users found in the system.</p>
-            <?php else: ?>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #f8f9fa;">
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6;">Name</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6;">Email</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6;">Role</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6;">Additional Info</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #dee2e6;">Joined</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($allUsers as $user): ?>
-                            <tr style="border-bottom: 1px solid #dee2e6;">
-                                <td style="padding: 12px;"><?php echo htmlspecialchars($user['name']); ?></td>
-                                <td style="padding: 12px;"><?php echo htmlspecialchars($user['email']); ?></td>
-                                <td style="padding: 12px;">
-                                    <span style="background: <?php 
-                                        echo $user['role'] === 'admin' ? '#dc3545' : 
-                                            ($user['role'] === 'donor' ? '#28a745' : '#ffc107'); 
-                                    ?>; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">
-                                        <?php echo strtoupper($user['role']); ?>
-                                    </span>
-                                </td>
-                                <td style="padding: 12px;">
-                                    <?php 
-                                    if ($user['role'] === 'donor') {
-                                        echo 'Donated: KES ' . number_format($user['additional_info'], 2);
-                                    } elseif ($user['role'] === 'victim') {
-                                        echo 'Status: ' . htmlspecialchars($user['additional_info']);
-                                    } else {
-                                        echo 'Administrator';
-                                    }
-                                    ?>
-                                </td>
-                                <td style="padding: 12px;"><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
+        <!-- Report Selector -->
+        <div class="report-selector">
+            <h3>Select Report to View</h3>
+            <select id="report-select" onchange="switchReport()">
+                <option value="all-users">All Users</option>
+                <option value="donations">Donation Reports</option>
+                <option value="distributions">Fund Distribution Reports</option>
+                <option value="top-donors">Top Donors Ranking</option>
+            </select>
+        </div>
+        
+        <!-- All Users Report -->
+        <div class="report-content active" id="report-all-users">
+            <div class="report-section">
+                <h2>All Users</h2>
+                <div class="report-summary">
+                    <div class="summary-card">
+                        <h4>Total Users</h4>
+                        <div class="value"><?php echo count($allUsers); ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Donors</h4>
+                        <div class="value"><?php echo $totalDonors; ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Victims</h4>
+                        <div class="value"><?php echo $totalVictims; ?></div>
+                    </div>
+                </div>
+                <?php if (empty($allUsers)): ?>
+                    <p style="color: #666;">No users found in the system.</p>
+                <?php else: ?>
+                    <div class="report-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>Additional Info</th>
+                                    <th>Joined</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($allUsers as $user): ?>
+                                    <tr>
+                                        <td><?php echo htmlspecialchars($user['name']); ?></td>
+                                        <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                        <td>
+                                            <span class="status-badge" style="background: <?php 
+                                                echo $user['role'] === 'admin' ? '#dc3545' : 
+                                                    ($user['role'] === 'donor' ? '#28a745' : '#ffc107'); 
+                                            ?>; color: white;">
+                                                <?php echo strtoupper($user['role']); ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php 
+                                            if ($user['role'] === 'donor') {
+                                                echo '<span class="amount-highlight">KES ' . number_format($user['additional_info'], 2) . '</span>';
+                                            } elseif ($user['role'] === 'victim') {
+                                                echo '<span class="status-badge ' . ($user['additional_info'] === 'Approved' ? 'status-completed' : 'status-pending') . '">' . htmlspecialchars($user['additional_info']) . '</span>';
+                                            } else {
+                                                echo 'Administrator';
+                                            }
+                                            ?>
+                                        </td>
+                                        <td><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        
+        <!-- Donation Reports -->
+        <div class="report-content" id="report-donations">
+            <div class="report-section">
+                <h2>Donation Reports</h2>
+                <div class="report-summary">
+                    <div class="summary-card">
+                        <h4>Total Donations</h4>
+                        <div class="value">KES <?php echo number_format($totalDonations, 0); ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Transactions</h4>
+                        <div class="value"><?php echo count($recentDonations); ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Active Donors</h4>
+                        <div class="value"><?php echo $totalDonors; ?></div>
+                    </div>
+                </div>
+                <?php if (empty($recentDonations)): ?>
+                    <p style="color: #666;">No donation records found.</p>
+                <?php else: ?>
+                    <div class="report-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Donor</th>
+                                    <th>Victim</th>
+                                    <th>Amount</th>
+                                    <th>Type</th>
+                                    <th>Payment Method</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($recentDonations as $donation): ?>
+                                    <tr>
+                                        <td><?php echo htmlspecialchars($donation['donor_name'] ?? 'General Pool'); ?></td>
+                                        <td><?php echo htmlspecialchars($donation['victim_name'] ?? 'General Pool'); ?></td>
+                                        <td><span class="amount-highlight">KES <?php echo number_format($donation['amount'], 2); ?></span></td>
+                                        <td><?php echo ucfirst($donation['donation_type']); ?></td>
+                                        <td><?php echo ucfirst($donation['payment_method']); ?></td>
+                                        <td><span class="status-badge status-<?php echo strtolower($donation['status']); ?>"><?php echo ucfirst($donation['status']); ?></span></td>
+                                        <td><?php echo date('M j, Y g:i A', strtotime($donation['donated_at'])); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        
+        <!-- Distribution Reports -->
+        <div class="report-content" id="report-distributions">
+            <div class="report-section">
+                <h2>Fund Distribution Reports</h2>
+                <div class="report-summary">
+                    <div class="summary-card">
+                        <h4>Total Distributed</h4>
+                        <div class="value">KES <?php echo number_format($generalPoolStats['total_distributed'], 0); ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Distributions Made</h4>
+                        <div class="value"><?php echo $generalPoolStats['distribution_count']; ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Available Funds</h4>
+                        <div class="value">KES <?php echo number_format($generalPoolStats['available'], 0); ?></div>
+                    </div>
+                </div>
+                <?php if (empty($recentDistributions)): ?>
+                    <p style="color: #666;">No distribution records found.</p>
+                <?php else: ?>
+                    <div class="report-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Victim</th>
+                                    <th>Location</th>
+                                    <th>Amount</th>
+                                    <th>Date</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($recentDistributions as $distribution): ?>
+                                    <tr>
+                                        <td><?php echo htmlspecialchars($distribution['victim_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($distribution['location']); ?></td>
+                                        <td><span class="amount-highlight">KES <?php echo number_format($distribution['amount'], 2); ?></span></td>
+                                        <td><?php echo date('M j, Y g:i A', strtotime($distribution['distribution_date'])); ?></td>
+                                        <td><?php echo htmlspecialchars($distribution['notes'] ?? 'N/A'); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        
+        <!-- Top Donors Report -->
+        <div class="report-content" id="report-top-donors">
+            <div class="report-section">
+                <h2>Top Donors Ranking</h2>
+                <div class="report-summary">
+                    <div class="summary-card">
+                        <h4>Total Ranked</h4>
+                        <div class="value"><?php echo count($topDonors); ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Total Donated</h4>
+                        <div class="value">KES <?php echo number_format($totalDonations, 0); ?></div>
+                    </div>
+                    <div class="summary-card">
+                        <h4>Average Donation</h4>
+                        <div class="value">KES <?php echo count($topDonors) > 0 ? number_format($totalDonations / count($topDonors), 0) : 0; ?></div>
+                    </div>
+                </div>
+                <?php if (empty($topDonors)): ?>
+                    <p style="color: #666;">No donor records found.</p>
+                <?php else: ?>
+                    <div class="report-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Donor Name</th>
+                                    <th>Email</th>
+                                    <th>Total Donated</th>
+                                    <th>Donation Count</th>
+                                    <th>Member Since</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php $rank = 1; foreach ($topDonors as $donor): ?>
+                                    <tr>
+                                        <td><span class="status-badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;"><?php echo $rank++; ?></span></td>
+                                        <td><?php echo htmlspecialchars($donor['name']); ?></td>
+                                        <td><?php echo htmlspecialchars($donor['email']); ?></td>
+                                        <td><span class="amount-highlight">KES <?php echo number_format($donor['total_donated'], 2); ?></span></td>
+                                        <td><?php echo $donor['donation_count']; ?></td>
+                                        <td><?php echo date('M j, Y', strtotime($donor['created_at'])); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
     
     <script>
+        // Switch between reports
+        function switchReport() {
+            const select = document.getElementById('report-select');
+            const selectedReport = select.value;
+            
+            console.log('Selected report:', selectedReport);
+            
+            // Hide all report contents
+            document.querySelectorAll('.report-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            
+            // Show selected report
+            const selectedContent = document.getElementById('report-' + selectedReport);
+            if (selectedContent) {
+                selectedContent.style.display = 'block';
+                console.log('Showing report:', selectedReport);
+            } else {
+                console.log('Report not found:', selectedReport);
+            }
+        }
+        
+        // Initialize - show first report by default
+        document.addEventListener('DOMContentLoaded', function() {
+            const firstReport = document.querySelector('.report-content');
+            if (firstReport) {
+                firstReport.style.display = 'block';
+            }
+        });
+        
         // Handle general fund distribution form
         document.getElementById('distribution-form').addEventListener('submit', function(e) {
             e.preventDefault();

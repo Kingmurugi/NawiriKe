@@ -1,7 +1,7 @@
 <?php
 /**
  * NawiriKe CRM Database Connection
- * Simple PDO connection for student project
+ * MySQLi connection for XAMPP/phpMyAdmin with debugging
  */
 
 class Database {
@@ -13,37 +13,38 @@ class Database {
 
     /**
      * Create database connection
-     * @return PDO|null
+     * @return mysqli|null
      */
     public function connect() {
         $this->conn = null;
 
         try {
-            // Create PDO connection
-            $this->conn = new PDO(
-                'mysql:host=' . $this->host . ';dbname=' . $this->db_name,
+            // Create MySQLi connection
+            $this->conn = new mysqli(
+                $this->host,
                 $this->username,
-                $this->password
+                $this->password,
+                $this->db_name
             );
 
-            // Set PDO error mode to exception
-            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            
-            // Set default fetch mode to associative array
-            $this->conn->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+            // Check connection
+            if ($this->conn->connect_error) {
+                error_log('Database Connection Error: ' . $this->conn->connect_error);
+                return null;
+            }
 
-        } catch(PDOException $e) {
-            error_log('Database Connection Error: ' . $e->getMessage());
-            // For debugging, you can uncomment the next line
-            // echo 'Connection Error: ' . $e->getMessage();
+            error_log('Database connection successful');
+            return $this->conn;
+
+        } catch(Exception $e) {
+            error_log('Database Connection Exception: ' . $e->getMessage());
+            return null;
         }
-
-        return $this->conn;
     }
 
     /**
      * Get current connection
-     * @return PDO|null
+     * @return mysqli|null
      */
     public function getConnection() {
         if ($this->conn === null) {
@@ -56,7 +57,10 @@ class Database {
      * Close database connection
      */
     public function close() {
-        $this->conn = null;
+        if ($this->conn !== null) {
+            $this->conn->close();
+            $this->conn = null;
+        }
     }
 }
 ?>

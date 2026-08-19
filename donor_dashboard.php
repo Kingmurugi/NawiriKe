@@ -17,8 +17,10 @@ $currentUser = getCurrentUser();
 try {
     // Get donor information
     $stmt = $conn->prepare("SELECT * FROM donors WHERE user_id = ?");
-    $stmt->execute([$currentUser['user_id']]);
-    $donorInfo = $stmt->fetch();
+    $stmt->bind_param("i", $currentUser['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $donorInfo = $result->fetch_assoc();
     
     // Check if donor record exists
     if (!$donorInfo) {
@@ -37,8 +39,10 @@ try {
         ORDER BY d.donated_at DESC
         LIMIT 10
     ");
-    $stmt->execute([$donorInfo['donor_id']]);
-    $donationHistory = $stmt->fetchAll();
+    $stmt->bind_param("i", $donorInfo['donor_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $donationHistory = $result->fetch_all(MYSQLI_ASSOC);
     
     // Get donation statistics
     $stmt = $conn->prepare("
@@ -50,8 +54,10 @@ try {
         FROM donations 
         WHERE donor_id = ?
     ");
-    $stmt->execute([$donorInfo['donor_id']]);
-    $donationStats = $stmt->fetch();
+    $stmt->bind_param("i", $donorInfo['donor_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $donationStats = $result->fetch_assoc();
     
     // Extract stats for easier use
     $totalDonated = $donationStats['total_amount'];
@@ -68,9 +74,10 @@ try {
         ORDER BY v.date_registered DESC
     ");
     $stmt->execute();
-    $availableVictims = $stmt->fetchAll();
+    $result = $stmt->get_result();
+    $availableVictims = $result->fetch_all(MYSQLI_ASSOC);
     
-} catch(PDOException $e) {
+} catch(Exception $e) {
     $error = $e->getMessage();
     $donorInfo = [];
     $donationHistory = [];
@@ -111,7 +118,7 @@ if ($currentUser['role'] !== 'donor') {
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             min-height: 100vh;
         }
         
@@ -123,18 +130,21 @@ if ($currentUser['role'] !== 'donor') {
         
         .header {
             background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 4px solid #667eea;
         }
         
         .header h1 {
             color: #333;
-            font-size: 28px;
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
         }
         
         .user-info {
@@ -148,17 +158,22 @@ if ($currentUser['role'] !== 'donor') {
         }
         
         .logout-btn {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 8px 16px;
+            padding: 12px 24px;
             border: none;
-            border-radius: 5px;
+            border-radius: 25px;
             cursor: pointer;
             text-decoration: none;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+            transition: all 0.3s ease;
         }
         
         .logout-btn:hover {
-            background: #0056b3;
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
         }
         
         .stats-grid {
@@ -170,35 +185,55 @@ if ($currentUser['role'] !== 'donor') {
         
         .stat-card {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
             text-align: center;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
         
         .stat-card h3 {
             color: #666;
-            font-size: 14px;
-            margin-bottom: 10px;
+            font-size: 13px;
+            margin-bottom: 12px;
             text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.5px;
         }
         
         .stat-card .number {
             color: #333;
-            font-size: 32px;
-            font-weight: bold;
+            font-size: 36px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         .donor-actions {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            margin-bottom: 25px;
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
         .donor-actions h2 {
             color: #333;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
         }
         
         .action-buttons {
@@ -208,37 +243,52 @@ if ($currentUser['role'] !== 'donor') {
         }
         
         .action-btn {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 15px;
+            padding: 16px;
             border: none;
-            border-radius: 5px;
+            border-radius: 10px;
             cursor: pointer;
             text-decoration: none;
             display: block;
             text-align: center;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
         }
         
         .action-btn:hover {
-            background: #0056b3;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102,126,234,0.4);
         }
         
         .role-badge {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 4px 8px;
-            border-radius: 3px;
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 700;
+            box-shadow: 0 2px 8px rgba(102,126,234,0.3);
         }
         
         .donation-form {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            margin-bottom: 25px;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .donation-form h2 {
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
         }
         
         .form-group {
@@ -261,17 +311,21 @@ if ($currentUser['role'] !== 'donor') {
         }
         
         .submit-btn {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 24px;
+            padding: 16px 32px;
             border: none;
-            border-radius: 5px;
+            border-radius: 25px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 17px;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
+            transition: all 0.3s ease;
         }
         
         .submit-btn:hover {
-            background: #0056b3;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102,126,234,0.4);
         }
         
         .notification {

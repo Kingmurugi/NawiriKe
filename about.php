@@ -16,7 +16,7 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             min-height: 100vh;
             color: #333;
         }
@@ -29,22 +29,30 @@
         
         .header {
             background: white;
-            border-radius: 10px;
-            padding: 30px;
+            border-radius: 15px;
+            padding: 40px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
             text-align: center;
+            border-bottom: 4px solid #667eea;
         }
         
         .header h1 {
-            color: #007bff;
-            font-size: 36px;
-            margin-bottom: 10px;
+            color: #333;
+            font-size: 42px;
+            margin-bottom: 15px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         .header p {
             color: #666;
-            font-size: 18px;
+            font-size: 19px;
+            font-weight: 500;
         }
         
         .content {
@@ -56,16 +64,18 @@
         
         .main-content {
             background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            padding: 35px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
         .sidebar {
             background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            padding: 35px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            border: 1px solid rgba(0,0,0,0.05);
         }
         
         .section {
@@ -73,11 +83,13 @@
         }
         
         .section h2 {
-            color: #007bff;
-            font-size: 24px;
-            margin-bottom: 15px;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
+            color: #333;
+            font-size: 26px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
         }
         
         .section p {
@@ -97,15 +109,17 @@
         }
         
         .contact-info {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 12px;
+            color: white;
         }
         
         .contact-info h3 {
-            color: #007bff;
-            margin-bottom: 15px;
+            color: white;
+            margin-bottom: 20px;
+            font-size: 20px;
+            font-weight: 700;
         }
         
         .contact-item {
@@ -116,11 +130,11 @@
         
         .contact-item strong {
             min-width: 80px;
-            color: #333;
+            color: rgba(255,255,255,0.9);
         }
         
         .contact-item span {
-            color: #555;
+            color: rgba(255,255,255,0.95);
         }
         
         .stats {
@@ -131,22 +145,30 @@
         }
         
         .stat-card {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 12px;
             text-align: center;
-            border: 1px solid #dee2e6;
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(102,126,234,0.3);
         }
         
         .stat-card h3 {
-            color: #007bff;
-            font-size: 32px;
-            margin-bottom: 5px;
+            color: white;
+            font-size: 36px;
+            margin-bottom: 8px;
+            font-weight: 800;
         }
         
         .stat-card p {
-            color: #666;
-            font-size: 14px;
+            color: rgba(255,255,255,0.9);
+            font-size: 15px;
+            font-weight: 600;
         }
         
         .team {
@@ -156,21 +178,31 @@
         }
         
         .team-member {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
             text-align: center;
-            border: 1px solid #dee2e6;
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .team-member:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
         
         .team-member h4 {
-            color: #007bff;
-            margin-bottom: 5px;
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 18px;
+            font-weight: 700;
         }
         
         .team-member p {
             color: #666;
-            font-size: 14px;
+            font-size: 15px;
+            font-weight: 500;
         }
         
         .back-link {
@@ -179,17 +211,21 @@
         }
         
         .back-link a {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 12px 24px;
+            padding: 16px 32px;
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 25px;
             display: inline-block;
-            transition: background 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.3);
         }
         
         .back-link a:hover {
-            background: #0056b3;
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102,126,234,0.4);
         }
         
         @media (max-width: 768px) {
@@ -302,20 +338,20 @@
                 <div class="section" style="margin-top: 30px;">
                     <h3>Quick Links</h3>
                     <ul style="list-style: none; padding: 0;">
-                        <li><a href="login.html" style="color: #007bff; text-decoration: none;">Login</a></li>
-                        <li><a href="signup.html" style="color: #007bff; text-decoration: none;">Sign Up</a></li>
-                        <li><a href="#" style="color: #007bff; text-decoration: none;">Donate Now</a></li>
-                        <li><a href="#" style="color: #007bff; text-decoration: none;">Volunteer</a></li>
+                        <li><a href="login.html" style="color: #667eea; text-decoration: none; font-weight: 600;">Login</a></li>
+                        <li><a href="signup.html" style="color: #667eea; text-decoration: none; font-weight: 600;">Sign Up</a></li>
+                        <li><a href="#" style="color: #667eea; text-decoration: none; font-weight: 600;">Donate Now</a></li>
+                        <li><a href="#" style="color: #667eea; text-decoration: none; font-weight: 600;">Volunteer</a></li>
                     </ul>
                 </div>
                 
                 <!-- Emergency Contact -->
-                <div class="contact-info" style="margin-top: 30px; background: #fff3cd; border-left-color: #ffc107;">
-                    <h3 style="color: #856404;">Emergency Support</h3>
-                    <p style="color: #856404; font-size: 14px;">If you or someone you know needs immediate assistance, please don't hesitate to reach out.</p>
+                <div class="contact-info" style="margin-top: 30px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <h3 style="color: white;">Emergency Support</h3>
+                    <p style="color: rgba(255,255,255,0.95); font-size: 15px;">If you or someone you know needs immediate assistance, please don't hesitate to reach out.</p>
                     <div class="contact-item">
                         <strong>Hotline:</strong>
-                        <span style="color: #dc3545; font-weight: bold;">0111611916</span>
+                        <span style="color: white; font-weight: bold; font-size: 18px;">0111611916</span>
                     </div>
                 </div>
             </div>

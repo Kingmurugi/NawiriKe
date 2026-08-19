@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 :root{
-  --accent-color: #007bff;
+  --accent-color: #667eea;
+  --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --base-color: white;
   --text-color: #2E2B41;
   --input-color: #F0F8FF;
@@ -17,7 +18,7 @@ html{
 }
 body{
   min-height: 100vh;
-  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
   background-size: cover;
   background-position: right;
   overflow: hidden;
@@ -27,17 +28,23 @@ body{
   background-color: var(--base-color);
   height: 100vh;
   width: max(40%, 600px);
-  padding: 10px;
+  padding: 20px;
   border-radius: 0 20px 20px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 }
 h1{
   font-size: 3rem;
   font-weight: 900;
   text-transform: uppercase;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 10px;
 }
 form{
   width: min(400px, 100%);
@@ -57,7 +64,7 @@ form label{
   flex-shrink: 0;
   height: 50px;
   width: 50px;
-  background-color: var(--accent-color);
+  background: var(--accent-gradient);
   fill: var(--base-color);
   color: var(--base-color);
   border-radius: 10px 0 0 10px;
@@ -66,6 +73,7 @@ form label{
   align-items: center;
   font-size: 1.5rem;
   font-weight: 500;
+  box-shadow: 0 4px 15px rgba(102,126,234,0.3);
 }
 form input{
   box-sizing: border-box;
@@ -98,27 +106,33 @@ form button{
   border: none;
   border-radius: 1000px;
   padding: .85em 4em;
-  background-color: var(--accent-color);
+  background: var(--accent-gradient);
   color: var(--base-color);
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   cursor: pointer;
-  transition: 150ms ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102,126,234,0.3);
 }
 form button:hover{
-  background-color: var(--text-color);
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102,126,234,0.4);
 }
 form button:focus{
   outline: none;
-  background-color: var(--text-color);
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
 a{
   text-decoration: none;
   color: var(--accent-color);
+  font-weight: 600;
+  transition: all 0.3s ease;
 }
 a:hover{
   text-decoration: underline;
+  color: #764ba2;
 }
 @media(max-width: 1100px){
   .wrapper{
@@ -127,10 +141,11 @@ a:hover{
   }
 }
 form div.incorrect label{
-  background-color: #f06272;
+  background: linear-gradient(135deg, #f06272 0%, #d32f2f 100%);
 }
 form div.incorrect input{
   border-color: #f06272;
+  box-shadow: 0 0 10px rgba(240, 98, 114, 0.3);
 }
 #error-message{
   color:#f06272;

@@ -69,11 +69,13 @@ function handleRegistration($conn) {
     if (empty($errors)) {
         try {
             $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ?");
-            $stmt->execute([$email]);
-            if ($stmt->fetch()) {
+            $stmt->bind_param("s", $email);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            if ($result->fetch_assoc()) {
                 $errors[] = "Email already registered";
             }
-        } catch(PDOException $e) {
+        } catch(Exception $e) {
             $errors[] = "Database error: " . $e->getMessage();
         }
     }
@@ -90,19 +92,22 @@ function handleRegistration($conn) {
         
         // Insert user into database
         $stmt = $conn->prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)");
-        $result = $stmt->execute([$name, $email, $password_hash, $role]);
+        $stmt->bind_param("ssss", $name, $email, $password_hash, $role);
+        $result = $stmt->execute();
         
         if ($result) {
             // Get the newly created user ID
-            $user_id = $conn->lastInsertId();
+            $user_id = $conn->insert_id;
             
             // Create corresponding profile record based on role
             if ($role === 'donor') {
                 $stmt = $conn->prepare("INSERT INTO donors (user_id, contact) VALUES (?, ?)");
-                $stmt->execute([$user_id, $contact]);
+                $stmt->bind_param("is", $user_id, $contact);
+                $stmt->execute();
             } elseif ($role === 'victim') {
                 $stmt = $conn->prepare("INSERT INTO victims (user_id, location, vulnerability_description, verification_status) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$user_id, '', '', 'Pending']);
+                $stmt->bind_param("isss", $user_id, '', '', 'Pending');
+                $stmt->execute();
             } elseif ($role === 'admin') {
                 // Admin users don't need additional profile records
                 // They get full admin privileges through the role field
@@ -152,18 +157,23 @@ function handleLogin($conn) {
     try {
         // Check if database connection is working
         if (!$conn) {
+            error_log("Database connection is null");
             return ['success' => false, 'errors' => ['Database connection failed']];
         }
         
-        // Get user from database
+        error_log("Database connection type: " . get_class($conn));
+        
+        // Get user from database using mysqli
         $stmt = $conn->prepare("SELECT user_id, name, email, password_hash, role FROM users WHERE email = ?");
         if (!$stmt) {
-            error_log("Database query preparation failed");
+            error_log("Database query preparation failed: " . $conn->error);
             return ['success' => false, 'errors' => ['Database query preparation failed']];
         }
         
-        $stmt->execute([$email]);
-        $user = $stmt->fetch();
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $user = $result->fetch_assoc();
         
         error_log("Database query executed, user found: " . ($user ? 'yes' : 'no'));
         
@@ -211,7 +221,8 @@ function handleLogin($conn) {
             return ['success' => false, 'errors' => ['Invalid password']];
         }
         
-    } catch(PDOException $e) {
+    } catch(Exception $e) {
+        error_log("Database error: " . $e->getMessage());
         return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
     }
 }
@@ -338,7 +349,8 @@ function handleVictimApplicationUpdate($conn, $userId, $location, $vulnerability
             SET location = ?, vulnerability_description = ?, urgent_needs = ?, last_updated = CURRENT_TIMESTAMP 
             WHERE user_id = ?
         ");
-        $result = $stmt->execute([$location, $vulnerability, $urgentNeeds, $userId]);
+        $stmt->bind_param("sssi", $location, $vulnerability, $urgentNeeds, $userId);
+        $result = $stmt->execute();
         
         if ($result) {
             return ['success' => true, 'message' => 'Application updated successfully!'];
@@ -346,7 +358,7 @@ function handleVictimApplicationUpdate($conn, $userId, $location, $vulnerability
             return ['success' => false, 'errors' => ['Failed to update application']];
         }
         
-    } catch(PDOException $e) {
+    } catch(Exception $e) {
         return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
     }
 }
@@ -363,12 +375,14 @@ function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $des
             INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone) 
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'completed', ?, ?)
         ");
-        $result = $stmt->execute([$donorId, $victimId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone]);
+        $stmt->bind_param("iidssss", $donorId, $victimId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone);
+        $result = $stmt->execute();
         
         if ($result) {
             // Update donor total donations
             $stmt = $conn->prepare("UPDATE donors SET total_donated = total_donated + ?, donation_count = donation_count + 1 WHERE donor_id = ?");
-            $stmt->execute([$amount, $donorId]);
+            $stmt->bind_param("di", $amount, $donorId);
+            $stmt->execute();
             
             $message = ($victimId) 
                 ? 'Donation processed successfully!' 
@@ -379,7 +393,7 @@ function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $des
             return ['success' => false, 'errors' => ['Failed to process donation']];
         }
         
-    } catch(PDOException $e) {
+    } catch(Exception $e) {
         return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
     }
 }
@@ -399,9 +413,15 @@ function initiateMpesaPayment($conn, $donorId, $victimId, $amount, $donationType
             INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone, mpesa_transaction_id, mpesa_receipt_number, mpesa_status) 
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', 'mpesa', ?, ?, ?, 'pending')
         ");
-        $result = $stmt->execute([$donorId, $victimId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber]);
+        $stmt->bind_param("iidsssss", $donorId, $victimId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber);
+        $result = $stmt->execute();
         
         if ($result) {
+            // Update donor total donations
+            $stmt = $conn->prepare("UPDATE donors SET total_donated = total_donated + ?, donation_count = donation_count + 1 WHERE donor_id = ?");
+            $stmt->bind_param("di", $amount, $donorId);
+            $stmt->execute();
+            
             // Simulate successful STK push initiation
             return [
                 'success' => true, 
@@ -413,7 +433,7 @@ function initiateMpesaPayment($conn, $donorId, $victimId, $amount, $donationType
             return ['success' => false, 'errors' => ['Failed to initiate M-Pesa payment']];
         }
         
-    } catch(PDOException $e) {
+    } catch(Exception $e) {
         return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
     }
 }
@@ -427,12 +447,14 @@ function distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes =
         // Check if sufficient general pool funds available
         $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE victim_id IS NULL");
         $stmt->execute();
-        $generalPoolTotal = $stmt->fetch()['total'];
+        $result = $stmt->get_result();
+        $generalPoolTotal = $result->fetch_assoc()['total'];
         
         // Get already distributed amount
         $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as distributed FROM distributions");
         $stmt->execute();
-        $totalDistributed = $stmt->fetch()['distributed'];
+        $result = $stmt->get_result();
+        $totalDistributed = $result->fetch_assoc()['distributed'];
         
         $available = $generalPoolTotal - $totalDistributed;
         
@@ -449,7 +471,8 @@ function distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes =
             LIMIT 1
         ");
         $stmt->execute();
-        $availableDonation = $stmt->fetch();
+        $result = $stmt->get_result();
+        $availableDonation = $result->fetch_assoc();
         
         if (!$availableDonation) {
             return ['success' => false, 'errors' => ['No available general pool donations to distribute']];
@@ -460,7 +483,8 @@ function distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes =
             INSERT INTO distributions (donation_id, victim_id, amount, distributed_by, distribution_date, notes) 
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
         ");
-        $result = $stmt->execute([$availableDonation['donation_id'], $victimId, $amount, $adminUserId, $notes]);
+        $stmt->bind_param("iiids", $availableDonation['donation_id'], $victimId, $amount, $adminUserId, $notes);
+        $result = $stmt->execute();
         
         if ($result) {
             return ['success' => true, 'message' => 'General fund distributed successfully!'];
@@ -468,7 +492,7 @@ function distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes =
             return ['success' => false, 'errors' => ['Failed to distribute funds']];
         }
         
-    } catch(PDOException $e) {
+    } catch(Exception $e) {
         return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
     }
 }
@@ -481,12 +505,14 @@ function getGeneralPoolStats($conn) {
         // Total general pool donations
         $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE victim_id IS NULL");
         $stmt->execute();
-        $totalPool = $stmt->fetch()['total'];
+        $result = $stmt->get_result();
+        $totalPool = $result->fetch_assoc()['total'];
         
         // Total distributed from general pool using distributions table
         $stmt = $conn->prepare("SELECT COALESCE(SUM(amount), 0) as distributed FROM distributions");
         $stmt->execute();
-        $totalDistributed = $stmt->fetch()['distributed'];
+        $result = $stmt->get_result();
+        $totalDistributed = $result->fetch_assoc()['distributed'];
         
         // Remaining available
         $available = $totalPool - $totalDistributed;
@@ -494,7 +520,8 @@ function getGeneralPoolStats($conn) {
         // Number of distributions made
         $stmt = $conn->prepare("SELECT COUNT(*) as count FROM distributions");
         $stmt->execute();
-        $distributionCount = $stmt->fetch()['count'];
+        $result = $stmt->get_result();
+        $distributionCount = $result->fetch_assoc()['count'];
         
         return [
             'total_pool' => $totalPool,
@@ -503,7 +530,7 @@ function getGeneralPoolStats($conn) {
             'distribution_count' => $distributionCount
         ];
         
-    } catch(PDOException $e) {
+    } catch(Exception $e) {
         error_log('General Pool Stats Error: ' . $e->getMessage());
         return [
             'total_pool' => 0,
