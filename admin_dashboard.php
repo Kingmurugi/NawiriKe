@@ -733,7 +733,7 @@ try {
         </div>
         
         <!-- All Users Report -->
-        <div class="report-content active" id="report-all-users">
+        <div class="report-content" id="report-all-users">
             <div class="report-section">
                 <h2>All Users</h2>
                 <div class="report-summary">

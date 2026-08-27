@@ -3,93 +3,329 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Signup</title>
-  <link rel="stylesheet" href="style.css">
-  <script type="text/javascript" src="signup.js" defer></script>
-<script>
-function toggleAdminCode() {
-    const roleSelect = document.getElementById('role-select');
-    const adminCodeField = document.getElementById('admin-code-field');
-    const contactField = document.getElementById('contact-field');
-    
-    if (roleSelect.value === 'admin') {
-        adminCodeField.style.display = 'block';
-        document.getElementById('admin-code').required = true;
-        contactField.style.display = 'none';
-        document.getElementById('contact-input').required = false;
-        document.getElementById('contact-input').value = '';
-    } else if (roleSelect.value === 'donor') {
-        adminCodeField.style.display = 'none';
-        document.getElementById('admin-code').required = false;
-        document.getElementById('admin-code').value = '';
-        contactField.style.display = 'block';
-        document.getElementById('contact-input').required = true;
-    } else {
-        adminCodeField.style.display = 'none';
-        document.getElementById('admin-code').required = false;
-        document.getElementById('admin-code').value = '';
-        contactField.style.display = 'none';
-        document.getElementById('contact-input').required = false;
-        document.getElementById('contact-input').value = '';
+  <title>Sign Up - NawiriKe CRM</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-}
-</script>
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+      overflow-y: auto;
+    }
+    
+    body::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+      animation: float 20s infinite ease-in-out;
+    }
+    
+    body::after {
+      content: '';
+      position: absolute;
+      bottom: -30%;
+      left: -10%;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+      animation: float 15s infinite ease-in-out reverse;
+    }
+    
+    @keyframes float {
+      0%, 100% {
+        transform: translate(0, 0) rotate(0deg);
+      }
+      50% {
+        transform: translate(30px, 30px) rotate(180deg);
+      }
+    }
+    
+    .signup-container {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border-radius: 30px;
+      padding: 50px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 500px;
+      position: relative;
+      z-index: 1;
+      animation: slideUp 0.6s ease;
+    }
+    
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .signup-header {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+    
+    .logo-icon {
+      width: 70px;
+      height: 70px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 32px;
+      font-weight: bold;
+      margin: 0 auto 20px;
+      box-shadow: 0 8px 25px rgba(102,126,234,0.3);
+    }
+    
+    .signup-header h1 {
+      font-size: 32px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+    
+    .signup-header p {
+      color: #666;
+      font-size: 16px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+    
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 15px 20px;
+      border: 2px solid #e9ecef;
+      border-radius: 15px;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      background: #f8f9fa;
+      font-family: inherit;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 4px rgba(102,126,234,0.1);
+      background: white;
+    }
+    
+    .form-group select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 20px center;
+      padding-right: 45px;
+    }
+    
+    .btn-signup {
+      width: 100%;
+      padding: 18px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 15px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 8px 25px rgba(102,126,234,0.3);
+      margin-top: 10px;
+    }
+    
+    .btn-signup:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 35px rgba(102,126,234,0.4);
+    }
+    
+    .btn-signup:active {
+      transform: translateY(0);
+    }
+    
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 25px;
+      font-size: 14px;
+      text-align: center;
+      display: none;
+    }
+    
+    .error-message.show {
+      display: block;
+      animation: shake 0.5s ease;
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+    
+    .login-link {
+      text-align: center;
+      margin-top: 25px;
+      color: #666;
+      font-size: 15px;
+    }
+    
+    .login-link a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 700;
+      transition: all 0.3s ease;
+    }
+    
+    .login-link a:hover {
+      color: #764ba2;
+      text-decoration: underline;
+    }
+    
+    .back-link {
+      text-align: center;
+      margin-top: 20px;
+    }
+    
+    .back-link a {
+      color: rgba(255,255,255,0.8);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    .back-link a:hover {
+      color: white;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+  <script>
+    function toggleAdminCode() {
+      const roleSelect = document.getElementById('role-select');
+      const adminCodeField = document.getElementById('admin-code-field');
+      const contactField = document.getElementById('contact-field');
+      
+      if (roleSelect.value === 'admin') {
+        adminCodeField.classList.remove('hidden');
+        document.getElementById('admin-code').required = true;
+        contactField.classList.add('hidden');
+        document.getElementById('contact-input').required = false;
+        document.getElementById('contact-input').value = '';
+      } else if (roleSelect.value === 'donor') {
+        adminCodeField.classList.add('hidden');
+        document.getElementById('admin-code').required = false;
+        document.getElementById('admin-code').value = '';
+        contactField.classList.remove('hidden');
+        document.getElementById('contact-input').required = true;
+      } else {
+        adminCodeField.classList.add('hidden');
+        document.getElementById('admin-code').required = false;
+        document.getElementById('admin-code').value = '';
+        contactField.classList.add('hidden');
+        document.getElementById('contact-input').required = false;
+        document.getElementById('contact-input').value = '';
+      }
+    }
+  </script>
 </head>
 <body>
-  <div class="wrapper">
-    <h1>Signup</h1>
-    <p id="error-message"></p>
+  <div class="signup-container">
+    <div class="signup-header">
+      <div class="logo-icon">NK</div>
+      <h1>Create Account</h1>
+      <p>Join NawiriKe CRM and make a difference</p>
+    </div>
+    
+    <div id="error-message" class="error-message"></div>
+    
     <form id="form">
-      <div>
-        <label for="firstname-input">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Z"/></svg>
-        </label>
-        <input type="text" name="firstname" id="firstname-input" placeholder="Firstname">
+      <div class="form-group">
+        <label for="firstname-input">Full Name</label>
+        <input type="text" name="firstname" id="firstname-input" placeholder="Enter your full name" required>
       </div>
-      <div>
-        <label for="email-input">
-          <span>@</span>
-        </label>
-        <input type="email" name="email" id="email-input" placeholder="Email">
+      
+      <div class="form-group">
+        <label for="email-input">Email Address</label>
+        <input type="email" name="email" id="email-input" placeholder="Enter your email" required>
       </div>
-      <div id="contact-field" style="display: none;">
-        <label for="contact-input">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-120q-33 0-56.5-23.5T200-200v-520q0-33 23.5-56.5T280-800h80v-80h80v80h160v-80h80v80h80q33 0 56.5 23.5T760-720v520q0 33-23.5 56.5T680-120H280Zm0-80h400v-360H280v360Zm0-440h400v-40H280v40Zm0 0v-40 40Zm0 440v-360 360Z"/></svg>
-        </label>
-        <input type="tel" name="contact" id="contact-input" placeholder="Contact Number">
+      
+      <div class="form-group" id="contact-field" style="display: none;">
+        <label for="contact-input">Contact Number</label>
+        <input type="tel" name="contact" id="contact-input" placeholder="Enter your contact number">
       </div>
-      <div>
-        <label for="password-input">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm240-200q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM360-640h240v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80Z"/></svg>
-        </label>
-        <input type="password" name="password" id="password-input" placeholder="Password">
+      
+      <div class="form-group">
+        <label for="password-input">Password</label>
+        <input type="password" name="password" id="password-input" placeholder="Create a password" required>
       </div>
-      <div>
-        <label for="repeat-password-input">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M240-80q-33 0-56.5-23.5T160-160v-400q0-33 23.5-56.5T240-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H240Zm240-200q33 0 56.5-23.5T560-360q0-33-23.5-56.5T480-440q-33 0-56.5 23.5T400-360q0 33 23.5 56.5T480-280ZM360-640h240v-80q0-50-35-85t-85-35q-50 0-85 35t-35 85v80Z"/></svg>
-        </label>
-        <input type="password" name="repeat-password" id="repeat-password-input" placeholder="Repeat Password">
+      
+      <div class="form-group">
+        <label for="repeat-password-input">Confirm Password</label>
+        <input type="password" name="repeat-password" id="repeat-password-input" placeholder="Confirm your password" required>
       </div>
-      <div>
-        <label for="role-select">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-80q-33 0-56.5-23.5T400-160v-112q0-34 17.5-62.5T464-378q62-31 126-46.5T720-440q66 0 130 15.5T976-378q29 15 46.5 43.5T1040-272v112q0 33-23.5 56.5T960-80H480Zm0-80h480v-112q0-11-5.5-20.5T936-316q-54-27-109-40.5T720-370q-72 0-127 13.5T484-316q-13 7-18.5 16.5T460-272v112Zm240-200q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47Zm0-80q33 0 56.5-23.5T800-520q0-33-23.5-56.5T720-600q-33 0-56.5 23.5T640-520q0 33 23.5 56.5T720-480ZM0-240v-112q0-33 23.5-56.5T80-400q17 0 34 4t33 12q-11 29-17 58.5T120-272v32H0Zm160-240q-33 0-56.5-23.5T80-560q0-33 23.5-56.5T160-640q33 0 56.5 23.5T240-560q0 33-23.5 56.5T160-480Zm80 240v-32q0-94 55-168.5T424-816q-11-22-15.5-46.5T404-912q0-33 23.5-56.5T480-992q33 0 56.5 23.5T560-912q0 21-4.5 45.5T536-816q74 31 129 105.5T720-480v32H240Z"/></svg>
-        </label>
+      
+      <div class="form-group">
+        <label for="role-select">Select Your Role</label>
         <select name="role" id="role-select" required onchange="toggleAdminCode()">
-          <option value="">Select Your Role</option>
+          <option value="">Choose your role</option>
           <option value="donor">Donor</option>
-          <option value="victim">Victim </option>
+          <option value="victim">Victim</option>
           <option value="admin">Admin - System Administrator</option>
         </select>
       </div>
-      <div id="admin-code-field" style="display: none;">
-        <label for="admin-code">
-          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-80q-33 0-56.5-23.5T200-160v-400q0-33 23.5-56.5T280-640h40v-80q0-83 58.5-141.5T480-920q83 0 141.5 58.5T680-720v80h40q33 0 56.5 23.5T800-560v400q0 33-23.5 56.5T720-80H280Zm0-80h400v-360H280v360Zm0-440h400v-40H280v40Zm0 0v-40 40Zm0 440v-360 360Z"/></svg>
-        </label>
-        <input type="text" name="admin_code" id="admin-code" placeholder="Enter admin code">
+      
+      <div class="form-group hidden" id="admin-code-field">
+        <label for="admin-code">Admin Code</label>
+        <input type="text" name="admin_code" id="admin-code" placeholder="Enter admin verification code">
       </div>
-      <button type="submit">Signup</button>
+      
+      <button type="submit" class="btn-signup">Create Account</button>
     </form>
-    <p>Already have an Account? <a href="login.html">login</a> </p>
+    
+    <p class="login-link">Already have an account? <a href="login.html">Login</a></p>
+    <p class="back-link"><a href="index.php">← Back to Home</a></p>
   </div>
+  
+  <script type="text/javascript" src="signup.js" defer></script>
 </body>
 </html>
