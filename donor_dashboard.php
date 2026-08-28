@@ -528,11 +528,10 @@ if ($currentUser['role'] !== 'donor') {
                 }
                 // victim_id is already in formData
             } else {
-                // General pool - remove victim_id or set to empty
+                // General pool - remove victim_id completely (will be NULL in database)
                 if (formData.has('victim_id')) {
                     formData.delete('victim_id');
                 }
-                formData.append('victim_id', '');
             }
             
             console.log('Submitting donation with donor_id:', donorId);
