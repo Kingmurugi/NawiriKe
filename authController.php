@@ -370,6 +370,8 @@ function handleVictimApplicationUpdate($conn, $userId, $location, $vulnerability
  */
 function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $description, $paymentMethod = 'cash', $mpesaPhone = null) {
     try {
+        error_log("handleDonation called - donor_id: $donorId, victim_id: " . ($victimId ?? 'NULL') . ", amount: $amount");
+        
         // Insert new donation (victim_id can be NULL for general pool)
         if ($victimId === null || $victimId === '') {
             // General pool donation - victim_id is NULL
@@ -388,22 +390,31 @@ function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $des
         }
         $result = $stmt->execute();
         
+        error_log("Donation insert result: " . ($result ? 'success' : 'failed'));
+        
         if ($result) {
+            $insertId = $conn->insert_id;
+            error_log("Donation inserted with ID: $insertId");
+            
             // Update donor total donations
             $stmt = $conn->prepare("UPDATE donors SET total_donated = total_donated + ?, donation_count = donation_count + 1 WHERE donor_id = ?");
             $stmt->bind_param("di", $amount, $donorId);
-            $stmt->execute();
+            $updateResult = $stmt->execute();
+            
+            error_log("Donor update result: " . ($updateResult ? 'success' : 'failed'));
             
             $message = ($victimId) 
                 ? 'Donation processed successfully!' 
                 : 'Donation added to general fund successfully!';
             
-            return ['success' => true, 'message' => $message];
+            return ['success' => true, 'message' => $message, 'donation_id' => $insertId];
         } else {
-            return ['success' => false, 'errors' => ['Failed to process donation']];
+            error_log("Donation insert failed: " . $conn->error);
+            return ['success' => false, 'errors' => ['Failed to process donation: ' . $conn->error]];
         }
         
     } catch(Exception $e) {
+        error_log("Donation exception: " . $e->getMessage());
         return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
     }
 }
