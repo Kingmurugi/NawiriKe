@@ -195,6 +195,21 @@ function handleLogin($conn) {
             $_SESSION['role'] = $user['role'];
             $_SESSION['logged_in'] = true;
             
+            // Auto-create donor record if user is a donor and record doesn't exist
+            if ($user['role'] === 'donor') {
+                $stmt = $conn->prepare("SELECT donor_id FROM donors WHERE user_id = ?");
+                $stmt->bind_param("i", $user['user_id']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    // Create donor record matching registration schema
+                    $stmt = $conn->prepare("INSERT INTO donors (user_id, contact) VALUES (?, '')");
+                    $stmt->bind_param("i", $user['user_id']);
+                    $stmt->execute();
+                    error_log("Auto-created donor record for user ID: " . $user['user_id']);
+                }
+            }
+            
             error_log("Session data stored for user ID: " . $user['user_id'] . ", Role: " . $user['role']);
             
             // Determine redirect URL based on role
@@ -706,8 +721,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     
     // Debug logging
-    error_log("AuthController: Action received: " . $action);
+    error_log("AuthController: Action received: '" . $action . "'");
     error_log("AuthController: POST data: " . print_r($_POST, true));
+    error_log("AuthController: Request method: " . $_SERVER['REQUEST_METHOD']);
+    
+    // Default response for invalid action
+    if (empty($action)) {
+        echo json_encode(['success' => false, 'errors' => ['No action specified']]);
+        exit();
+    }
     
     switch($action) {
         case 'register':
