@@ -541,6 +541,117 @@ function getGeneralPoolStats($conn) {
     }
 }
 
+/**
+ * Handle User Update
+ * Updates user information in the database
+ */
+function handleUpdateUser($conn, $userId, $name, $email, $role) {
+    try {
+        // Validate input
+        $errors = [];
+        
+        if (empty($name)) {
+            $errors[] = "Name is required";
+        }
+        
+        if (empty($email)) {
+            $errors[] = "Email is required";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = "Invalid email format";
+        }
+        
+        if (empty($role) || !in_array($role, ['admin', 'donor', 'victim'])) {
+            $errors[] = "Invalid role";
+        }
+        
+        if (!empty($errors)) {
+            return ['success' => false, 'errors' => $errors];
+        }
+        
+        // Check if email already exists for another user
+        $stmt = $conn->prepare("SELECT user_id FROM users WHERE email = ? AND user_id != ?");
+        $stmt->bind_param("si", $email, $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result->fetch_assoc()) {
+            return ['success' => false, 'errors' => ['Email already in use by another user']];
+        }
+        
+        // Update user
+        $stmt = $conn->prepare("UPDATE users SET name = ?, email = ?, role = ? WHERE user_id = ?");
+        $stmt->bind_param("sssi", $name, $email, $role, $userId);
+        $result = $stmt->execute();
+        
+        if ($result) {
+            return ['success' => true, 'message' => 'User updated successfully'];
+        } else {
+            return ['success' => false, 'errors' => ['Failed to update user']];
+        }
+        
+    } catch(Exception $e) {
+        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+    }
+}
+
+/**
+ * Handle User Deletion
+ * Deletes a user from the database
+ */
+function handleDeleteUser($conn, $userId) {
+    try {
+        // Check if user exists
+        $stmt = $conn->prepare("SELECT user_id, role FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $user = $result->fetch_assoc();
+        
+        if (!$user) {
+            return ['success' => false, 'errors' => ['User not found']];
+        }
+        
+        // Prevent deletion of the current admin
+        if (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $userId) {
+            return ['success' => false, 'errors' => ['Cannot delete your own account']];
+        }
+        
+        // Delete related records based on role
+        if ($user['role'] === 'donor') {
+            // Delete donor record and related donations
+            $stmt = $conn->prepare("DELETE FROM donations WHERE donor_id IN (SELECT donor_id FROM donors WHERE user_id = ?)");
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            
+            $stmt = $conn->prepare("DELETE FROM donors WHERE user_id = ?");
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+        } elseif ($user['role'] === 'victim') {
+            // Delete victim record and related distributions
+            $stmt = $conn->prepare("DELETE FROM distributions WHERE victim_id IN (SELECT victim_id FROM victims WHERE user_id = ?)");
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+            
+            $stmt = $conn->prepare("DELETE FROM victims WHERE user_id = ?");
+            $stmt->bind_param("i", $userId);
+            $stmt->execute();
+        }
+        
+        // Delete user record
+        $stmt = $conn->prepare("DELETE FROM users WHERE user_id = ?");
+        $stmt->bind_param("i", $userId);
+        $result = $stmt->execute();
+        
+        if ($result) {
+            return ['success' => true, 'message' => 'User deleted successfully'];
+        } else {
+            return ['success' => false, 'errors' => ['Failed to delete user']];
+        }
+        
+    } catch(Exception $e) {
+        return ['success' => false, 'errors' => ['Database error: ' . $e->getMessage()]];
+    }
+}
+
 // Handle GET requests (for logout via direct link)
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? '';
@@ -633,6 +744,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $amount = $_POST['amount'] ?? 0;
             $notes = $_POST['notes'] ?? '';
             $result = distributeGeneralFund($conn, $adminUserId, $victimId, $amount, $notes);
+            echo json_encode($result);
+            break;
+            
+        case 'update_user':
+            $userId = $_POST['user_id'] ?? 0;
+            $name = $_POST['name'] ?? '';
+            $email = $_POST['email'] ?? '';
+            $role = $_POST['role'] ?? '';
+            $result = handleUpdateUser($conn, $userId, $name, $email, $role);
+            echo json_encode($result);
+            break;
+            
+        case 'delete_user':
+            $userId = $_POST['user_id'] ?? 0;
+            $result = handleDeleteUser($conn, $userId);
             echo json_encode($result);
             break;
             

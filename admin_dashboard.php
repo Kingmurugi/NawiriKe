@@ -485,6 +485,10 @@ try {
             display: none;
         }
         
+        .report-content.active {
+            display: block;
+        }
+        
         .report-table {
             max-height: 450px;
             overflow-y: auto;
@@ -762,6 +766,7 @@ try {
                                     <th>Role</th>
                                     <th>Additional Info</th>
                                     <th>Joined</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -789,6 +794,11 @@ try {
                                             ?>
                                         </td>
                                         <td><?php echo date('M j, Y', strtotime($user['created_at'])); ?></td>
+                                        <td>
+                                            <button onclick="viewUser(<?php echo $user['user_id']; ?>, '<?php echo htmlspecialchars($user['name']); ?>', '<?php echo htmlspecialchars($user['email']); ?>', '<?php echo $user['role']; ?>')" style="background: #007bff; color: white; padding: 6px 12px; border: none; border-radius: 4px; margin-right: 5px; cursor: pointer; font-size: 12px;">View</button>
+                                            <button onclick="editUser(<?php echo $user['user_id']; ?>, '<?php echo htmlspecialchars($user['name']); ?>', '<?php echo htmlspecialchars($user['email']); ?>', '<?php echo $user['role']; ?>')" style="background: #ffc107; color: white; padding: 6px 12px; border: none; border-radius: 4px; margin-right: 5px; cursor: pointer; font-size: 12px;">Edit</button>
+                                            <button onclick="deleteUser(<?php echo $user['user_id']; ?>, '<?php echo htmlspecialchars($user['name']); ?>')" style="background: #dc3545; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Delete</button>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -960,15 +970,15 @@ try {
             
             console.log('Selected report:', selectedReport);
             
-            // Hide all report contents
+            // Hide all report contents by removing active class
             document.querySelectorAll('.report-content').forEach(content => {
-                content.style.display = 'none';
+                content.classList.remove('active');
             });
             
-            // Show selected report
+            // Show selected report by adding active class
             const selectedContent = document.getElementById('report-' + selectedReport);
             if (selectedContent) {
-                selectedContent.style.display = 'block';
+                selectedContent.classList.add('active');
                 console.log('Showing report:', selectedReport);
             } else {
                 console.log('Report not found:', selectedReport);
@@ -1072,6 +1082,126 @@ try {
                 .then(data => {
                     if (data.success) {
                         alert('Victim application rejected successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                });
+            }
+        }
+        
+        // User management functions
+        function viewUser(userId, userName, userEmail, userRole) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.8); display: flex; align-items: center; 
+                justify-content: center; z-index: 1000;
+            `;
+            modal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="color: #667eea; margin: 0;">User Details</h3>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">Close</button>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                        <p style="margin: 10px 0;"><strong>Name:</strong> ${userName}</p>
+                        <p style="margin: 10px 0;"><strong>Email:</strong> ${userEmail}</p>
+                        <p style="margin: 10px 0;"><strong>Role:</strong> ${userRole.toUpperCase()}</p>
+                        <p style="margin: 10px 0;"><strong>User ID:</strong> ${userId}</p>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        function editUser(userId, userName, userEmail, userRole) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.8); display: flex; align-items: center; 
+                justify-content: center; z-index: 1000;
+            `;
+            modal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="color: #667eea; margin: 0;">Edit User</h3>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">Close</button>
+                    </div>
+                    <form id="edit-user-form" onsubmit="updateUser(event, ${userId})">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name:</label>
+                            <input type="text" id="edit-name" value="${userName}" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Email:</label>
+                            <input type="email" id="edit-email" value="${userEmail}" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Role:</label>
+                            <select id="edit-role" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                <option value="admin" ${userRole === 'admin' ? 'selected' : ''}>Admin</option>
+                                <option value="donor" ${userRole === 'donor' ? 'selected' : ''}>Donor</option>
+                                <option value="victim" ${userRole === 'victim' ? 'selected' : ''}>Victim</option>
+                            </select>
+                        </div>
+                        <button type="submit" style="background: #28a745; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; width: 100%;">Update User</button>
+                    </form>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        
+        function updateUser(event, userId) {
+            event.preventDefault();
+            const name = document.getElementById('edit-name').value;
+            const email = document.getElementById('edit-email').value;
+            const role = document.getElementById('edit-role').value;
+            
+            const formData = new FormData();
+            formData.append('action', 'update_user');
+            formData.append('user_id', userId);
+            formData.append('name', name);
+            formData.append('email', email);
+            formData.append('role', role);
+            
+            fetch('authController.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('User updated successfully!');
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred. Please try again.');
+            });
+        }
+        
+        function deleteUser(userId, userName) {
+            if (confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
+                const formData = new FormData();
+                formData.append('action', 'delete_user');
+                formData.append('user_id', userId);
+                
+                fetch('authController.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('User deleted successfully!');
                         location.reload();
                     } else {
                         alert('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
