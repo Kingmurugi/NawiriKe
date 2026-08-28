@@ -977,10 +977,8 @@ try {
         
         // Initialize - show first report by default
         document.addEventListener('DOMContentLoaded', function() {
-            const firstReport = document.querySelector('.report-content');
-            if (firstReport) {
-                firstReport.style.display = 'block';
-            }
+            // Call switchReport to show the default selected report
+            switchReport();
         });
         
         // Handle general fund distribution form

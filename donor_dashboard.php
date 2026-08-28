@@ -589,13 +589,10 @@ if ($currentUser['role'] !== 'donor') {
                         const mode = donationMode === 'direct' ? 'direct donation' : 'general pool contribution';
                         showNotification('Thank you for your ' + mode + ' of KES ' + amount + '!', 'success');
                         this.reset();
-                        // Update total donations display without page reload
-                        const totalDonatedElement = document.getElementById('total-donated-display');
-                        if (totalDonatedElement) {
-                            const currentTotal = parseFloat(totalDonatedElement.textContent.replace(/[^0-9.-]+/g, '')) || 0;
-                            const newTotal = currentTotal + parseFloat(amount);
-                            totalDonatedElement.textContent = 'KES ' + newTotal.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                        }
+                        // Reload page to update statistics from database
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
                     }
                 } else {
                     showNotification('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'), 'error');
