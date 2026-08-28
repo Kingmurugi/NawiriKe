@@ -575,6 +575,10 @@ if ($currentUser['role'] !== 'donor') {
             })
             .then(data => {
                 console.log('Data received:', data);
+                console.log('Success:', data.success);
+                console.log('Message:', data.message);
+                console.log('Errors:', data.errors);
+                
                 if (data.success) {
                     if (paymentMethod === 'mpesa') {
                         showNotification('M-Pesa STK Push sent! Check your phone to complete payment.', 'success');
@@ -595,6 +599,7 @@ if ($currentUser['role'] !== 'donor') {
                     }
                 } else {
                     showNotification('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'), 'error');
+                    console.error('Donation failed:', data.errors);
                 }
             })
             .catch(error => {
