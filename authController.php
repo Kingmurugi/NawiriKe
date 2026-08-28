@@ -371,11 +371,21 @@ function handleVictimApplicationUpdate($conn, $userId, $location, $vulnerability
 function handleDonation($conn, $donorId, $victimId, $amount, $donationType, $description, $paymentMethod = 'cash', $mpesaPhone = null) {
     try {
         // Insert new donation (victim_id can be NULL for general pool)
-        $stmt = $conn->prepare("
-            INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone) 
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'completed', ?, ?)
-        ");
-        $stmt->bind_param("iidssss", $donorId, $victimId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone);
+        if ($victimId === null || $victimId === '') {
+            // General pool donation - victim_id is NULL
+            $stmt = $conn->prepare("
+                INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone) 
+                VALUES (?, NULL, ?, ?, ?, CURRENT_TIMESTAMP, 'completed', ?, ?)
+            ");
+            $stmt->bind_param("idssss", $donorId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone);
+        } else {
+            // Direct donation to specific victim
+            $stmt = $conn->prepare("
+                INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone) 
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'completed', ?, ?)
+            ");
+            $stmt->bind_param("iidssss", $donorId, $victimId, $amount, $donationType, $description, $paymentMethod, $mpesaPhone);
+        }
         $result = $stmt->execute();
         
         if ($result) {
@@ -409,11 +419,21 @@ function initiateMpesaPayment($conn, $donorId, $victimId, $amount, $donationType
         $receiptNumber = 'REC' . time() . rand(1000, 9999);
         
         // Insert donation with pending M-Pesa status
-        $stmt = $conn->prepare("
-            INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone, mpesa_transaction_id, mpesa_receipt_number, mpesa_status) 
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', 'mpesa', ?, ?, ?, 'pending')
-        ");
-        $stmt->bind_param("iidsssss", $donorId, $victimId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber);
+        if ($victimId === null || $victimId === '') {
+            // General pool donation - victim_id is NULL
+            $stmt = $conn->prepare("
+                INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone, mpesa_transaction_id, mpesa_receipt_number, mpesa_status) 
+                VALUES (?, NULL, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', 'mpesa', ?, ?, ?, 'pending')
+            ");
+            $stmt->bind_param("idsssss", $donorId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber);
+        } else {
+            // Direct donation to specific victim
+            $stmt = $conn->prepare("
+                INSERT INTO donations (donor_id, victim_id, amount, donation_type, description, donated_at, status, payment_method, mpesa_phone, mpesa_transaction_id, mpesa_receipt_number, mpesa_status) 
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', 'mpesa', ?, ?, ?, 'pending')
+            ");
+            $stmt->bind_param("iidsssss", $donorId, $victimId, $amount, $donationType, $description, $mpesaPhone, $transactionId, $receiptNumber);
+        }
         $result = $stmt->execute();
         
         if ($result) {
