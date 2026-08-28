@@ -1147,46 +1147,51 @@ try {
         }
         
         // Handle general fund distribution form
-        document.getElementById('distribution-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            formData.append('action', 'distribute_general_fund');
-            formData.append('admin_user_id', <?php echo $currentUser['user_id']; ?>);
-            
-            // Add notes if provided
-            const notes = document.getElementById('distribution-notes').value;
-            if (notes) {
-                formData.append('notes', notes);
-            }
-            
-            const submitBtn = this.querySelector('button[type="submit"]');
-            const originalText = submitBtn.textContent;
-            submitBtn.textContent = 'Processing...';
-            submitBtn.disabled = true;
-            
-            fetch('authController.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('General fund distributed successfully!');
-                    location.reload();
-                } else {
-                    alert('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
+        <?php if ($generalPoolStats['available'] > 0 && !empty($approvedVictims)): ?>
+        const distributionForm = document.getElementById('distribution-form');
+        if (distributionForm) {
+            distributionForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(this);
+                formData.append('action', 'distribute_general_fund');
+                formData.append('admin_user_id', <?php echo $currentUser['user_id']; ?>);
+                
+                // Add notes if provided
+                const notes = document.getElementById('distribution-notes').value;
+                if (notes) {
+                    formData.append('notes', notes);
                 }
-            })
-            .catch(error => {
-                console.error('Distribution error:', error);
-                alert('An error occurred. Please try again.');
-            })
-            .finally(() => {
-                submitBtn.textContent = originalText;
-                submitBtn.disabled = false;
+                
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const originalText = submitBtn.textContent;
+                submitBtn.textContent = 'Processing...';
+                submitBtn.disabled = true;
+                
+                fetch('authController.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('General fund distributed successfully!');
+                        location.reload();
+                    } else {
+                        alert('Error: ' + (data.errors ? data.errors.join(', ') : 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Distribution error:', error);
+                    alert('An error occurred. Please try again.');
+                })
+                .finally(() => {
+                    submitBtn.textContent = originalText;
+                    submitBtn.disabled = false;
+                });
             });
-        });
+        }
+        <?php endif; ?>
         
         // Load dashboard statistics
         function loadStats() {
